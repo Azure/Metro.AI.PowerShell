@@ -1,14 +1,13 @@
-# Project
+# Metro.AI PowerShell module
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+Metro.AI is a PowerShell module that simplifies working with Azure AI Agent and Assistant APIs. It provides a unified, intuitive command set to manage AI resources, upload files, start and monitor threads, and integrate custom functions, all from your PowerShell console.
 
-As the maintainer of this project, please make a few updates:
+## Getting Started
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+Metro-AI is designed for simplicity and speed. To get started, simply install the module from PowerShell gallery
+
+```powershell
+Install-Module Metro.AI
 
 ## Contributing
 
