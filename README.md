@@ -8,7 +8,7 @@ Metro-AI is designed for simplicity and speed. To get started, simply install th
 
 ```powershell
 Install-Module Metro.AI
-
+```
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
