@@ -3,7 +3,7 @@
     RootModule        = 'Metro.AI.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '0.1.0'
+    ModuleVersion     = '0.1.1'
 
     # GUID used to uniquely identify this module.
     GUID              = '09e3e9c9-b7b7-4449-a5e1-a026bbc7c8fb'
