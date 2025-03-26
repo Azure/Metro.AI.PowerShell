@@ -3,7 +3,7 @@
     RootModule        = 'Metro.AI.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '0.1.1'
+    ModuleVersion     = '0.2.0'
 
     # GUID used to uniquely identify this module.
     GUID              = '09e3e9c9-b7b7-4449-a5e1-a026bbc7c8fb'
@@ -35,6 +35,7 @@
         'Remove-MetroAIFiles',
         'New-MetroAIResource',
         'Get-MetroAIResource',
+        'Invoke-MetroAIApiCall',
         'Remove-MetroAIResource',
         'New-MetroAIFunction',
         'New-MetroAIThread',
