@@ -3,7 +3,7 @@
     RootModule        = 'Metro.AI.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '0.2.0'
+    ModuleVersion     = '0.3.0'
 
     # GUID used to uniquely identify this module.
     GUID              = '09e3e9c9-b7b7-4449-a5e1-a026bbc7c8fb'
@@ -25,11 +25,6 @@
 
     # Functions to export from this module.
     FunctionsToExport = @(
-        'Get-MetroAuthHeader',
-        'Get-MetroBaseUri',
-        'Get-MetroApiVersion',
-        'Get-MetroUri',
-        'Get-MetroAIToken',
         'Invoke-MetroAIUploadFile',
         'Get-MetroAIOutputFiles',
         'Remove-MetroAIFiles',
@@ -37,6 +32,8 @@
         'Get-MetroAIResource',
         'Invoke-MetroAIApiCall',
         'Remove-MetroAIResource',
+        'Set-MetroAIResource',
+        'Set-MetroAIResource',
         'New-MetroAIFunction',
         'New-MetroAIThread',
         'Get-MetroAIThread',
@@ -45,12 +42,16 @@
         'Get-MetroAIThreadStatus',
         'Get-MetroAIMessages',
         'Start-MetroAIThreadWithMessages',
-        'Add-MetroAIAgentOpenAPIDefinition'
+        'Add-MetroAIAgentOpenAPIDefinition',
+        'Set-MetroAIContext',
+        'Get-MetroAIContext'
     )
 
     AliasesToExport   = @(
         'Get-MetroAIAgent',
         'Get-MetroAIAssistant',
+        'Set-MetroAIAgent',
+        'Set-MetroAIAssistant',
         'New-MetroAIAgent',
         'New-MetroAIAssistant',
         'Remove-MetroAIAgent',
