@@ -4,7 +4,7 @@ Metro.AI is a PowerShell module that simplifies working with Azure AI Agent and 
 
 ### Getting Started
 
-Metro-AI is designed for simplicity and speed. To quickly set it up, install the module directly from the PowerShell Gallery using:
+Metro.AI is designed for simplicity and speed. To quickly set it up, install the module directly from the PowerShell Gallery using:
 
 ```powershell
 Install-Module Metro.AI -Force
@@ -12,7 +12,7 @@ Install-Module Metro.AI -Force
 
 ## Connecting to Azure
 
-Before using Metro-AI, ensure you're connected to your Azure account:
+Before using Metro.AI, ensure you're connected to your Azure account:
 
 ```powershell
 Connect-AzAccount
@@ -22,7 +22,7 @@ Connect-AzAccount
 
 ### Setting Up MetroAI Context
 
-Retrieve the connection string from your Azure AI Foundry project, then configure Metro-AI:
+Retrieve the connection string from your Azure AI Foundry project, then configure Metro.AI:
 
 ```powershell
 # Example project connection string
@@ -34,7 +34,7 @@ Get-MetroAIContext
 
 ### Creating a New Agent
 
-Define your agent's instructions and create a new Metro-AI agent using GPT-4o:
+Define your agent's instructions and create a new Metro.AI agent using GPT-4o:
 
 ```powershell
 $instructions = @"
