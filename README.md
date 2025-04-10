@@ -2,13 +2,83 @@
 
 Metro.AI is a PowerShell module that simplifies working with Azure AI Agent and Assistant APIs. It provides a unified, intuitive command set to manage AI resources, upload files, start and monitor threads, and integrate custom functions, all from your PowerShell console.
 
-## Getting Started
+### Getting Started
 
-Metro-AI is designed for simplicity and speed. To get started, simply install the module from PowerShell gallery
+Metro-AI is designed for simplicity and speed. To quickly set it up, install the module directly from the PowerShell Gallery using:
 
 ```powershell
-Install-Module Metro.AI
+Install-Module Metro.AI -Force
 ```
+
+## Connecting to Azure
+
+Before using Metro-AI, ensure you're connected to your Azure account:
+
+```powershell
+Connect-AzAccount
+```
+
+## Example Usage
+
+### Setting Up MetroAI Context
+
+Retrieve the connection string from your Azure AI Foundry project, then configure Metro-AI:
+
+```powershell
+# Example project connection string
+$connectionString = "swedencentral.api.azureml.ms;80ffa654-da7f-4c46-8d9a-9ed75956766e;ai-foundry-workflows;admin-7818"
+
+Set-MetroAIContext -ConnectionString $connectionString -ApiType Agent
+Get-MetroAIContext
+```
+
+### Creating a New Agent
+
+Define your agent's instructions and create a new Metro-AI agent using GPT-4o:
+
+```powershell
+$instructions = @"
+You are a helpful assistant. Your task is to assist the user with their queries and provide relevant information.
+You should always be polite and respectful. If you do not know the answer to a question, you should say so.
+You should not provide personal opinions or make assumptions about the user.
+Always ask clarifying questions if the user's request is unclear.
+"@
+
+New-MetroAIAgent -ResourceName "myAgent" -Model gpt4o -MetaPrompt $instructions
+```
+
+### Creating and Managing Threads
+
+Start a new conversation thread:
+
+```powershell
+$thread = New-MetroAIThread
+```
+
+Add a message to the thread:
+
+```powershell
+$message = Invoke-MetroAIMessage -ThreadID $thread.id -Message "Hello, can you generate a PowerShell script that I can download as a file to connect to Azure?"
+```
+
+Execute the thread with the previously created agent:
+
+```powershell
+$run = Start-MetroAIThreadRun -ThreadID $thread.id -AssistantId asst_y0NifdnDS0hrprT9azLw3VrK
+```
+
+After execution, the agent generates a downloadable script:
+
+```powershell
+# List available output files
+Get-MetroAIOutputFiles
+
+# Download the file locally
+Get-MetroAIOutputFiles -FileId assistant-TqVaZqCx3ZcP6aR4eRay98 -LocalFilePath ConnectToAzure.ps1
+```
+
+You can now use the downloaded `ConnectToAzure.ps1` script to establish a connection to Azure.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

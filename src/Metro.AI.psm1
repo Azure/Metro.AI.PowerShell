@@ -1,5 +1,62 @@
 #region Helper Functions
 
+class MetroAIContext {
+    [string]$Endpoint
+    [ValidateSet('Agent', 'Assistant')]
+    [string]$ApiType
+
+    MetroAIContext([string]$endpoint, [string]$apiType) {
+        $this.Endpoint = $endpoint
+        $this.ApiType = $apiType
+    }
+
+    MetroAIContext([string]$connectionString, [string]$apiType, [switch]$fromConnectionString) {
+        $parts = $connectionString -split ';'
+        if ($parts.Count -ne 4) { throw "Invalid connection string format." }
+        $this.Endpoint = ('https://{0}/agents/v1.0/subscriptions/{1}/resourceGroups/{2}/providers/Microsoft.MachineLearningServices/workspaces/{3}' -f $parts)
+        $this.ApiType = $apiType
+    }
+
+    [string] ResolveUri([string]$Service, [string]$Operation, [string]$Path = "", [switch]$UseOpenPrefix) {
+        $prefix = ($this.ApiType -eq 'Assistant' -and $UseOpenPrefix) ? "openai/" : ""
+        $baseUri = "$($this.Endpoint)/$prefix$Service"
+        if ($Path) { $baseUri += "/$Path" }
+        $version = Get-MetroApiVersion -Operation $Operation -ApiType $this.ApiType
+        return "$baseUri`?api-version=$version"
+    }
+}
+
+function Set-MetroAIContext {
+    param (
+        [Parameter(Mandatory, ParameterSetName = 'Endpoint')]
+        [string]$Endpoint,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('Agent', 'Assistant')]
+        [string]$ApiType,
+
+        [Parameter(Mandatory, ParameterSetName = 'ConnectionString')]
+        [string]$ConnectionString
+    )
+
+    if ($PSCmdlet.ParameterSetName -eq 'ConnectionString') {
+        Write-Verbose "Setting context from connection string $ConnectionString"
+        $script:MetroContext = [MetroAIContext]::new($ConnectionString, $ApiType, $true)
+    }
+    else {
+        $script:MetroContext = [MetroAIContext]::new($Endpoint, $ApiType)
+    }
+}
+
+function Get-MetroAIContext {
+    if ($script:MetroContext) {
+        return $script:MetroContext
+    }
+    else {
+        Write-Error "No Metro AI context set. Use Set-MetroAIContext to set it."
+    }
+}
+
 function Get-MetroAuthHeader {
     <#
     .SYNOPSIS
@@ -15,6 +72,8 @@ function Get-MetroAuthHeader {
         [string]$ApiType
     )
     try {
+        $AzContext = Get-AzContext -ErrorAction Stop
+        if (-not $AzContext) { throw "Not connected to Azure, connect with Connect-AzAccount." }
         $resourceUrl = if ($ApiType -eq 'Agent') { "https://ml.azure.com/" } else { "https://cognitiveservices.azure.com" }
         $token = (Get-AzAccessToken -ResourceUrl $resourceUrl -AsSecureString).Token | ConvertFrom-SecureString -AsPlainText
         if (-not $token) { throw "Token retrieval failed." }
@@ -22,32 +81,8 @@ function Get-MetroAuthHeader {
     }
     catch {
         Write-Error "Get-MetroAuthHeader error for '$ApiType': $_"
+        break
     }
-}
-
-function Get-MetroBaseUri {
-    <#
-    .SYNOPSIS
-        Constructs the base URI for a given service.
-    .DESCRIPTION
-        Builds the full base URI by prepending "openai/" only when the API type is Assistant and the UseOpenPrefix switch is provided.
-    .PARAMETER Endpoint
-        The base URL of the API.
-    .PARAMETER ApiType
-        The API type: Agent or Assistant.
-    .PARAMETER Service
-        The service segment (e.g. "assistants", "files", "threads").
-    .PARAMETER UseOpenPrefix
-        When specified and ApiType is Assistant, "openai/" is prepended.
-    #>
-    param (
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
-        [Parameter(Mandatory = $true)] [string]$Service,
-        [switch]$UseOpenPrefix
-    )
-    $prefix = ($ApiType -eq 'Assistant' -and $UseOpenPrefix) ? "openai/" : ""
-    return "$Endpoint/$prefix$Service"
 }
 
 function Get-MetroApiVersion {
@@ -75,44 +110,6 @@ function Get-MetroApiVersion {
     }
 }
 
-function Get-MetroUri {
-    <#
-    .SYNOPSIS
-        Builds the complete URI for an API call.
-    .DESCRIPTION
-        Constructs the final URI by calling Get-MetroBaseUri and appending the API version.
-    .PARAMETER Endpoint
-        The base URL of the API.
-    .PARAMETER ApiType
-        The API type: Agent or Assistant.
-    .PARAMETER Service
-        The service segment.
-    .PARAMETER Operation
-        The operation name.
-    .PARAMETER Path
-        Optional additional path.
-    #>
-    param (
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
-        [Parameter(Mandatory = $true)] [string]$Service,
-        [Parameter(Mandatory = $true)] [string]$Operation,
-        [string]$Path
-    )
-    $params = @{
-        Endpoint = $Endpoint
-        ApiType  = $ApiType
-        Service  = $Service
-    }
-    if ($ApiType -eq 'Assistant') { $params.UseOpenPrefix = $true }
-    $baseUri = Get-MetroBaseUri @params
-    if ($Path) { $baseUri = "$baseUri/$Path" }
-    $version = Get-MetroApiVersion -Operation $Operation -ApiType $ApiType
-    $uri = "{0}?api-version={1}" -f $baseUri, $version
-    Write-Verbose $uri
-    return $uri
-}
-
 function Invoke-MetroAIApiCall {
     <#
     .SYNOPSIS
@@ -120,10 +117,6 @@ function Invoke-MetroAIApiCall {
     .DESCRIPTION
         Constructs the full API URI, obtains the authorization header, merges additional headers,
         and invokes the REST method with error handling.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        The API type: Agent or Assistant.
     .PARAMETER Service
         The service segment.
     .PARAMETER Operation
@@ -151,8 +144,6 @@ function Invoke-MetroAIApiCall {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [Parameter(Mandatory = $true)] [string]$Service,
         [Parameter(Mandatory = $true)] [string]$Operation,
         [Parameter(Mandatory = $false)] [string]$Path,
@@ -164,44 +155,33 @@ function Invoke-MetroAIApiCall {
         [Parameter(Mandatory = $false)] [switch]$UseOpenPrefix,
         [Parameter(Mandatory = $false)] [object]$Form
     )
+    if (-not $script:MetroContext) {
+        throw "MetroAI context not set. Use Set-MetroAIContext before invoking calls."
+    }
     try {
-        # Get authorization header and merge additional headers if provided.
-        $authHeader = Get-MetroAuthHeader -ApiType $ApiType
-        if ($AdditionalHeaders) { $authHeader = $authHeader + $AdditionalHeaders }
+        $authHeader = Get-MetroAuthHeader -ApiType $script:MetroContext.ApiType
+        if ($AdditionalHeaders) { $authHeader += $AdditionalHeaders }
 
-        # Build base URI.
-        $params = @{
-            Endpoint = $Endpoint
-            ApiType  = $ApiType
-            Service  = $Service
-        }
-        if ($ApiType -eq 'Assistant' -and $UseOpenPrefix) { $params.Add("UseOpenPrefix", $true) }
-        $baseUri = Get-MetroBaseUri @params
-        if ($Path) { $baseUri = "$baseUri/$Path" }
-        $version = Get-MetroApiVersion -Operation $Operation -ApiType $ApiType
-        $uri = "{0}?api-version={1}" -f $baseUri, $version
+        $uri = $script:MetroContext.ResolveUri($Service, $Operation, $Path, $UseOpenPrefix)
 
         Write-Verbose "Calling API at URI: $uri with method $Method"
 
-        # Build parameters for Invoke-RestMethod.
         $invokeParams = @{
             Uri        = $uri
             Method     = $Method
             Headers    = $authHeader
             TimeoutSec = $TimeoutSeconds
         }
-        if ($ContentType) { $invokeParams.Add("ContentType", $ContentType) }
+        if ($ContentType) { $invokeParams.ContentType = $ContentType }
         if ($Form) {
-            $invokeParams.Add("Form", $Form)
+            $invokeParams.Form = $Form
         }
         elseif ($Body) {
-            if ($ContentType -and $ContentType -eq "application/json") {
-                # Option A: Use a variable
-                $jsonBody = $Body | ConvertTo-Json -Depth 100
-                $invokeParams.Add("Body", $jsonBody)
+            if ($ContentType -eq "application/json") {
+                $invokeParams.Body = $Body | ConvertTo-Json -Depth 100
             }
             else {
-                $invokeParams.Add("Body", $Body)
+                $invokeParams.Body = $Body
             }
         }
         return Invoke-RestMethod @invokeParams
@@ -223,24 +203,18 @@ function Invoke-MetroAIUploadFile {
         Reads a local file and uploads it via a multipart/form-data request.
     .PARAMETER FilePath
         The local path to the file.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Specifies whether the call is for an Agent or an Assistant.
     .PARAMETER Purpose
         The purpose of the file upload.
     #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)] [string]$FilePath,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [string]$Purpose = "assistants"
     )
     try {
         $fileItem = Get-Item -Path $FilePath -ErrorAction Stop
         $body = @{ purpose = $Purpose; file = $fileItem }
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'files' -Operation 'upload' -Method Post -Form $body -ContentType "multipart/form-data"
+        Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Method Post -Form $body -ContentType "multipart/form-data"
     }
     catch {
         Write-Error "Invoke-MetroAIUploadFile error: $_"
@@ -253,10 +227,6 @@ function Get-MetroAIOutputFiles {
         Retrieves output files for an assistant.
     .DESCRIPTION
         Downloads output files (with purpose "assistants_output") from an assistant endpoint.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Specifies whether to target an Agent or an Assistant.
     .PARAMETER FileId
         Optional file ID.
     .PARAMETER LocalFilePath
@@ -264,8 +234,6 @@ function Get-MetroAIOutputFiles {
     #>
     [CmdletBinding(DefaultParameterSetName = 'NoFileId')]
     param (
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [Parameter(Mandatory = $false, ParameterSetName = 'FileId')] [string]$FileId,
         [Parameter(Mandatory = $false, ParameterSetName = 'FileId')] [string]$LocalFilePath
     )
@@ -274,11 +242,11 @@ function Get-MetroAIOutputFiles {
             Write-Error "LocalFilePath can only be used with FileId."
             break
         }
-        $files = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'files' -Operation 'upload' -Method Get
+        $files = Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Method Get
         if (-not [string]::IsNullOrWhiteSpace($FileId)) {
             $item = $files.data | Where-Object { $_.id -eq $FileId -and $_.purpose -eq "assistants_output" }
             if ($item) {
-                $content = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'files' -Operation 'upload' -Path ("{0}/content" -f $FileId) -Method Get
+                $content = Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Path ("{0}/content" -f $FileId) -Method Get
                 if ($LocalFilePath) {
                     $content | Out-File -FilePath $LocalFilePath -Force -Verbose
                 }
@@ -307,25 +275,19 @@ function Remove-MetroAIFiles {
         Deletes files from an endpoint.
     .DESCRIPTION
         Removes the specified file (or all files if FileId is not provided).
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Specifies whether to target an Agent or an Assistant.
     .PARAMETER FileId
         Optional specific file ID.
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [string]$FileId
     )
     try {
-        $files = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'files' -Operation 'upload' -Method Get
+        $files = Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Method Get
         if ($FileId) {
             $item = $files.data | Where-Object { $_.id -eq $FileId }
             if ($item) {
-                Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'files' -Operation 'upload' -Path $FileId -Method Delete
+                Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Path $FileId -Method Delete
                 Write-Output "File $FileId deleted."
             }
             else { Write-Error "File $FileId not found." }
@@ -333,7 +295,7 @@ function Remove-MetroAIFiles {
         else {
             foreach ($file in $files.data) {
                 try {
-                    Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'files' -Operation 'upload' -Path $file.id -Method Delete
+                    Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Path $file.id -Method Delete
                 }
                 catch { Write-Error "Error deleting file $($file.id): $_" }
             }
@@ -349,20 +311,41 @@ function Remove-MetroAIFiles {
 #region Resource Management
 
 function New-MetroAIResource {
+    <#
+        .SYNOPSIS
+            Creates a new AI Foundry resource (Agent or Assistant).
+        .DESCRIPTION
+            This function creates a new AI agent or assistant using the specified model and instructions. It optionally reads instructions from a meta prompt file and, for Assistants, can attach file identifiers. If no resource name is provided, a default name is generated based on the current date and time.
+        .PARAMETER MetaPromptFile
+            The file path to a text file containing a meta prompt (instructions) for the resource. When provided, the contents are read and concatenated into a single string.
+        .PARAMETER Model
+            The identifier of the model to be used for the Metro AI resource.
+        .PARAMETER FileIds
+            (Optional) An array of file identifiers to attach to the resource when the ApiType is 'Assistant'.
+        .PARAMETER ResourceName
+            (Optional) The desired name for the resource. If not provided, a default name is generated automatically.
+        .EXAMPLE
+            New-MetroAIResource -Model "gpt-4" -Endpoint "https://example.azure.com" -ApiType Assistant -MetaPromptFile "C:\path\to\prompt.txt" -FileIds @("file1", "file2")
+        .NOTES
+            Ensure that the Endpoint is reachable and you have the necessary permissions. The generated resource name is based on the current date and time if none is provided.
+    #>
     [Alias("New-MetroAIAgent")]
     [Alias("New-MetroAIAssistant")]
     [CmdletBinding()]
     param (
-        [string]$MetaPromptFile = "",
+        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPromptFile')][string]$MetaPromptFile = "",
+        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPrompt')][string]$MetaPrompt = "",
         [Parameter(Mandatory = $true)] [string]$Model,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [string[]]$FileIds,
         [Parameter(Mandatory = $false)] [string]$ResourceName = ""
     )
     try {
-        $metaPrompt = if ($MetaPromptFile) { (Get-Content -Path $MetaPromptFile -ErrorAction Stop) -join "`n" } else { "" }
-        if (-not $ResourceName) { $ResourceName = (Get-Date -Format "dd-HH-mm-ss") + "-resource" }
+        if (-not($PSBoundParameters['MetaPrompt'])) {
+            $metaPrompt = if ($MetaPromptFile) { (Get-Content -Path $MetaPromptFile -ErrorAction Stop) -join "`n" } else { "" }
+        }
+
+        if (-not $ResourceName) { $ResourceName = (Get-Date -Format ddMMyyHHmmss) + "-agent" }
+        Write-Verbose "Creating resource with name: $ResourceName"
         $body = @{
             instructions = $metaPrompt
             name         = $ResourceName
@@ -373,25 +356,62 @@ function New-MetroAIResource {
             model        = $Model
         }
         if ($ApiType -eq 'Assistant' -and $FileIds) { $body.file_ids = $FileIds }
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'assistants' -Operation 'create' -Method Post -ContentType "application/json" -Body $body
+        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Method Post -ContentType "application/json" -Body $body
     }
     catch {
         Write-Error "New-MetroAIResource error: $_"
     }
 }
 
+function Set-MetroAIResource {
+    [Alias("Set-MetroAIAgent")]
+    [Alias("Set-MetroAIAssistant")]
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $false, parameterSetName = 'AssistantId')][string]$AssistantId,
+        [Parameter(Mandatory = $true, parameterSetName = 'Json')][string]$InputFile = "",
+        [Parameter(Mandatory = $false, parameterSetName = 'AssistantId')][string]$Body = ""
+    )
+
+    try {
+        if ($InputFile) {
+            Write-Verbose "Getting content from file: $InputFile"
+            $requestBody = Get-Content -Path $InputFile -Raw | ConvertFrom-Json -Depth 100 -NoEnumerate
+            $requestAssistantId = $requestBody.id
+            $requestBody = $requestBody | Select-Object -ExcludeProperty id, object, created_at
+        }
+
+        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Path $requestAssistantId -Method Post -ContentType "application/json" -Body $requestBody
+    }
+    catch {
+        Write-Error "Set-MetroAIResource error: $_"
+    }
+}
+
 function Get-MetroAIResource {
+    <#
+        .SYNOPSIS
+            Retrieves details of Metro AI resources (Agent or Assistant).
+        .DESCRIPTION
+            This function queries the specified Metro AI service endpoint to retrieve resource details. If an AssistantId is provided, it returns details for that specific resource; otherwise, it returns a collection of all available resources based on the ApiType.
+        .PARAMETER AssistantId
+            (Optional) The unique identifier of a specific assistant resource to retrieve. If not provided, the function returns all available resources.
+        .EXAMPLE
+            Get-MetroAIResource -AssistantId "resource-123" -Endpoint "https://example.azure.com" -ApiType Agent
+        .EXAMPLE
+            Get-MetroAIResource -Endpoint "https://example.azure.com" -ApiType Assistant
+        .NOTES
+            When an AssistantId is provided, the function returns the detailed resource object; otherwise, it returns an array of resource summaries.
+    #>
     [Alias("Get-MetroAIAgent")]
     [Alias("Get-MetroAIAssistant")]
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $false)] [string]$AssistantId,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
+        [Parameter(Mandatory = $false)] [string]$AssistantId
     )
     try {
         $path = $AssistantId
-        $result = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'assistants' -Operation 'get' -Path $path -Method Get
+        $result = Invoke-MetroAIApiCall -Service 'assistants' -Operation 'get' -Path $path -Method Get
         if ($PSBoundParameters['AssistantId']) { return $result } else { return $result.data }
     }
     catch {
@@ -400,12 +420,26 @@ function Get-MetroAIResource {
 }
 
 function Remove-MetroAIResource {
+    <#
+        .SYNOPSIS
+            Removes one or more Metro AI resources (Agent or Assistant).
+        .DESCRIPTION
+            This function deletes Metro AI resources from the specified endpoint. When an AssistantId is provided, it deletes that specific resource. Otherwise, it retrieves all resources for the specified ApiType and attempts to delete each one. Use caution, as this action is irreversible.
+        .PARAMETER All
+            (Optional) Switch parameter to delete all resources. When used, the function will delete every resource matching the specified ApiType.
+        .PARAMETER AssistantId
+            (Optional) The unique identifier of a specific assistant resource to delete. If provided, only that resource is deleted.
+        .EXAMPLE
+            Remove-MetroAIResource -Endpoint "https://example.azure.com" -ApiType Agent -AssistantId "resource-123"
+        .EXAMPLE
+            Remove-MetroAIResource -Endpoint "https://example.azure.com" -ApiType Assistant -All
+        .NOTES
+            This function permanently deletes resources. Confirm that the resources are no longer needed before executing this command.
+    #>
     [Alias("Remove-MetroAIAgent")]
     [Alias("Remove-MetroAIAssistant")]
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [Parameter(Mandatory = $false, ParameterSetName = 'All')] [switch]$All,
         [Parameter(Mandatory = $false, ParameterSetName = 'SingleAssistant')] [string]$AssistantId
     )
@@ -417,7 +451,7 @@ function Remove-MetroAIResource {
             $resources = Get-MetroAIResource -Endpoint $Endpoint -ApiType $ApiType
         }
         foreach ($res in $resources) {
-            Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'assistants' -Operation 'create' -Path $res.id -Method Delete
+            Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Path $res.id -Method Delete
         }
     }
     catch {
@@ -443,14 +477,10 @@ function New-MetroAIFunction {
         The required parameter name.
     .PARAMETER PropertyDescription
         A description for the required parameter.
-    .PARAMETER Endpoint
-        The base API URL.
     .PARAMETER AssistantId
         The target agent or assistant ID.
     .PARAMETER Instructions
         The instructions for the function.
-    .PARAMETER ApiType
-        Agent or Assistant.
     #>
     [CmdletBinding()]
     param (
@@ -458,10 +488,8 @@ function New-MetroAIFunction {
         [Parameter(Mandatory = $true)] [string]$Description,
         [Parameter(Mandatory = $true)] [string]$RequiredPropertyName,
         [Parameter(Mandatory = $true)] [string]$PropertyDescription,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
         [Parameter(Mandatory = $true)] [string]$AssistantId,
-        [Parameter(Mandatory = $true)] [string]$Instructions,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
+        [Parameter(Mandatory = $true)] [string]$Instructions
     )
     try {
         $resource = Get-MetroAIResource -AssistantId $AssistantId -Endpoint $Endpoint -ApiType $ApiType
@@ -491,7 +519,7 @@ function New-MetroAIFunction {
             id           = $AssistantId
             model        = $model
         }
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'assistants' -Operation 'get' -Method Post -ContentType "application/json" -Body $body
+        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'get' -Method Post -ContentType "application/json" -Body $body
     }
     catch {
         Write-Error "New-MetroAIFunction error: $_"
@@ -508,18 +536,12 @@ function New-MetroAIThread {
         Creates a new thread.
     .DESCRIPTION
         Initiates a new thread for an agent or assistant.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Agent or Assistant.
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
     )
     try {
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'thread' -Method Post -ContentType "application/json"
+        Invoke-MetroAIApiCall -Service 'threads' -Operation 'thread' -Method Post -ContentType "application/json"
     }
     catch {
         Write-Error "New-MetroAIThread error: $_"
@@ -532,21 +554,15 @@ function Get-MetroAIThread {
         Retrieves thread details.
     .DESCRIPTION
         Returns details of a specified thread.
-    .PARAMETER Endpoint
-        The base API URL.
     .PARAMETER ThreadID
         The thread ID.
-    .PARAMETER ApiType
-        Agent or Assistant.
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [string]$ThreadID,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
+        [string]$ThreadID
     )
     try {
-        $result = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'thread' -Path $ThreadID -Method Get
+        $result = Invoke-MetroAIApiCall -Service 'threads' -Operation 'thread' -Path $ThreadID -Method Get
         if ($PSBoundParameters['ThreadID']) { return $result } else { return $result.data }
     }
     catch {
@@ -564,21 +580,15 @@ function Invoke-MetroAIMessage {
         The thread ID.
     .PARAMETER Message
         The message content.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Agent or Assistant.
     #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)] [string]$ThreadID,
-        [Parameter(Mandatory = $true)] [string]$Message,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
+        [Parameter(Mandatory = $true)] [string]$Message
     )
     try {
         $body = @(@{ role = "user"; content = $Message })
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'thread' -Path ("{0}/messages" -f $ThreadID) -Method Post -ContentType "application/json" -Body $body
+        Invoke-MetroAIApiCall -Service 'threads' -Operation 'thread' -Path ("{0}/messages" -f $ThreadID) -Method Post -ContentType "application/json" -Body $body
     }
     catch {
         Write-Error "Invoke-MetroAIMessage error: $_"
@@ -595,10 +605,6 @@ function Start-MetroAIThreadRun {
         The agent or assistant ID.
     .PARAMETER ThreadID
         The thread ID.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Agent or Assistant.
     .PARAMETER Async
         Run asynchronously.
     #>
@@ -606,24 +612,22 @@ function Start-MetroAIThreadRun {
     param (
         [Parameter(Mandatory = $true)] [string]$AssistantId,
         [Parameter(Mandatory = $true)] [string]$ThreadID,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [switch]$Async
     )
     try {
         $body = @{ assistant_id = $AssistantId }
-        $runResponse = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' `
+        $runResponse = Invoke-MetroAIApiCall -Service 'threads' `
             -Operation 'threadStatus' -Path ("{0}/runs" -f $ThreadID) -Method Post `
             -ContentType "application/json" -Body $body
         if (-not $Async) {
             $i = 0
             do {
                 Start-Sleep -Seconds 10
-                $runResult = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $ThreadID, $runResponse.id) -Method Get
+                $runResult = Invoke-MetroAIApiCall -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $ThreadID, $runResponse.id) -Method Get
                 $i++
             } while ($runResult.status -ne "completed" -and $i -lt 100)
             if ($runResult.status -eq "completed") {
-                $result = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $ThreadID) -Method Get
+                $result = Invoke-MetroAIApiCall -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $ThreadID) -Method Get
                 return $result.data | ForEach-Object { $_.content.text }
             }
             else { Write-Error "Run did not complete in time." }
@@ -646,20 +650,14 @@ function Get-MetroAIThreadStatus {
         The thread ID.
     .PARAMETER RunID
         The run ID.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Agent or Assistant.
     #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)] [string]$ThreadID,
-        [Parameter(Mandatory = $true)] [string]$RunID,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
+        [Parameter(Mandatory = $true)] [string]$RunID
     )
     try {
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $ThreadID, $RunID) -Method Get
+        Invoke-MetroAIApiCall -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $ThreadID, $RunID) -Method Get
     }
     catch {
         Write-Error "Get-MetroAIThreadStatus error: $_"
@@ -674,19 +672,13 @@ function Get-MetroAIMessages {
         Returns the messages for the specified thread.
     .PARAMETER ThreadID
         The thread ID.
-    .PARAMETER Endpoint
-        The base API URL.
-    .PARAMETER ApiType
-        Agent or Assistant.
     #>
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)] [string]$ThreadID,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
+        [Parameter(Mandatory = $true)] [string]$ThreadID
     )
     try {
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $ThreadID) -Method Get | Select-Object -ExpandProperty data
+        Invoke-MetroAIApiCall -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $ThreadID) -Method Get | Select-Object -ExpandProperty data
     }
     catch {
         Write-Error "Get-MetroAIMessages error: $_"
@@ -699,23 +691,17 @@ function Start-MetroAIThreadWithMessages {
         Creates a new thread with an initial message.
     .DESCRIPTION
         Initiates a thread and sends an initial message.
-    .PARAMETER AssistantId
-        The agent or assistant ID.
     .PARAMETER Endpoint
         The base API URL.
     .PARAMETER MessageContent
         The initial message.
-    .PARAMETER ApiType
-        Agent or Assistant.
     .PARAMETER Async
         Run asynchronously.
     #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)] [string]$AssistantId,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
         [Parameter(Mandatory = $true)] [string]$MessageContent,
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType,
         [switch]$Async
     )
     try {
@@ -723,16 +709,17 @@ function Start-MetroAIThreadWithMessages {
             assistant_id = $AssistantId;
             thread       = @{ messages = @(@{ role = "user"; content = $MessageContent }) }
         }
-        $response = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'thread' -Path "runs" -Method Post -ContentType "application/json" -Body $body
+        $response = Invoke-MetroAIApiCall -Service 'threads' -Operation 'thread' -Path "runs" -Method Post -ContentType "application/json" -Body $body
         if (-not $Async) {
             $i = 0
             do {
                 Start-Sleep -Seconds 10
-                $runResult = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $response.thread_id, $response.id) -Method Get
+                Write-Verbose "Checking thread status..."
+                $runResult = Invoke-MetroAIApiCall -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $response.thread_id, $response.id) -Method Get
                 $i++
             } while ($runResult.status -ne "completed" -and $i -lt 100)
             if ($runResult.status -eq "completed") {
-                $result = Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $response.thread_id) -Method Get
+                $result = Invoke-MetroAIApiCall -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $response.thread_id) -Method Get
                 return $result.data | ForEach-Object { $_.content.text }
             }
             else { Write-Error "Thread run did not complete in time." }
@@ -757,25 +744,19 @@ function Add-MetroAIAgentOpenAPIDefinition {
         Reads an OpenAPI JSON file and adds it as a tool to the specified agent.
     .PARAMETER AgentId
         The agent ID.
-    .PARAMETER Endpoint
-        The base API URL.
     .PARAMETER DefinitionFile
         The path to the OpenAPI JSON file.
     .PARAMETER Name
         Optional name for the OpenAPI definition.
     .PARAMETER Description
         Optional description.
-    .PARAMETER ApiType
-        Must be Agent.
     #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)] [string]$AgentId,
-        [Parameter(Mandatory = $true)] [string]$Endpoint,
         [Parameter(Mandatory = $true)] [string]$DefinitionFile,
         [string]$Name = "",
-        [string]$Description = "",
-        [Parameter(Mandatory = $true)] [ValidateSet('Agent')] [string]$ApiType
+        [string]$Description = ""
     )
     try {
         if ($ApiType -ne 'Agent') { throw "Only Agent API type is supported." }
@@ -796,7 +777,7 @@ function Add-MetroAIAgentOpenAPIDefinition {
                 }
             )
         }
-        Invoke-MetroAIApiCall -Endpoint $Endpoint -ApiType $ApiType -Service 'assistants' -Operation 'openapi' -Path $AgentId -Method Post -ContentType "application/json" -Body $body
+        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'openapi' -Path $AgentId -Method Post -ContentType "application/json" -Body $body
     }
     catch {
         Write-Error "Add-MetroAIAgentOpenAPIDefinition error: $_"
