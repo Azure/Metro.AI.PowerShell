@@ -64,7 +64,6 @@
             Tags       = @('Metropolis', 'Azure', 'Agent', 'Assistant')
             LicenseUri = 'https://opensource.org/licenses/MIT'
             ProjectUri = 'https://github.com/Azure/Metro.AI.PowerShell'
-            Prerelease = 'preview'
         }
     }
 }
