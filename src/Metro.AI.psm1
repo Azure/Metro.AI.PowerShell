@@ -5,28 +5,54 @@ class MetroAIContext {
     [ValidateSet('Agent', 'Assistant')]
     [string]$ApiType
 
-    MetroAIContext([string]$endpoint, [string]$apiType) {
-        $this.Endpoint = $endpoint
+    [bool]$UseNewApi
+    [string]$ApiVersion
+
+    MetroAIContext([string]$endpoint, [string]$apiType, [string]$apiVersion = "") {
+        # keep your original logic for simple endpoint+apiType
+        $this.Endpoint = $endpoint.TrimEnd('/')
         $this.ApiType = $apiType
+        $this.ApiVersion = $apiVersion
+
+        # auto-detect new vs old based on hostname
+        # new AI endpoints live under *.ai.azure.com
+        $this.UseNewApi = $this.Endpoint -match '\.ai\.azure\.com'
     }
 
     MetroAIContext([string]$connectionString, [string]$apiType, [switch]$fromConnectionString) {
+        # exactly your original split/format
         $parts = $connectionString -split ';'
         if ($parts.Count -ne 4) { throw "Invalid connection string format." }
         $this.Endpoint = ('https://{0}/agents/v1.0/subscriptions/{1}/resourceGroups/{2}/providers/Microsoft.MachineLearningServices/workspaces/{3}' -f $parts)
         $this.ApiType = $apiType
+        $this.ApiVersion = ""
     }
 
-    [string] ResolveUri([string]$Service, [string]$Operation, [string]$Path = "", [switch]$UseOpenPrefix) {
+    [string] ResolveUri(
+        [string]$Service,
+        [string]$Operation,
+        [string]$Path = "",
+        [switch]$UseOpenPrefix
+    ) {
+        if ($this.UseNewApi) {
+            # new surface: endpoint already includes /api/projects/{…}
+            $base = "$($this.Endpoint)/$Service"
+            if ($Path) { $base += "/$Path" }
+            $ver = if ($this.ApiVersion) { $this.ApiVersion } else { '2025-05-15-preview' }
+            return "$base`?api-version=$ver"
+        }
+
+        # old-style behavior
         $prefix = ($this.ApiType -eq 'Assistant' -and $UseOpenPrefix) ? "openai/" : ""
         $baseUri = "$($this.Endpoint)/$prefix$Service"
         if ($Path) { $baseUri += "/$Path" }
-        $version = Get-MetroApiVersion -Operation $Operation -ApiType $this.ApiType
-        return "$baseUri`?api-version=$version"
+        $ver = if ($this.ApiVersion) { $this.ApiVersion } else { Get-MetroApiVersion -Operation $Operation -ApiType $this.ApiType }
+        return "$baseUri`?api-version=$ver"
     }
 }
 
 function Set-MetroAIContext {
+    [CmdletBinding(DefaultParameterSetName = 'Endpoint')]
     param (
         [Parameter(Mandatory, ParameterSetName = 'Endpoint')]
         [string]$Endpoint,
@@ -36,17 +62,22 @@ function Set-MetroAIContext {
         [string]$ApiType,
 
         [Parameter(Mandatory, ParameterSetName = 'ConnectionString')]
-        [string]$ConnectionString
+        [string]$ConnectionString,
+
+        [string]$ApiVersion
     )
 
     if ($PSCmdlet.ParameterSetName -eq 'ConnectionString') {
-        Write-Verbose "Setting context from connection string $ConnectionString"
+        Write-Verbose "Setting context from connection string"
         $script:MetroContext = [MetroAIContext]::new($ConnectionString, $ApiType, $true)
     }
     else {
-        $script:MetroContext = [MetroAIContext]::new($Endpoint, $ApiType)
+        Write-Verbose "Setting context for endpoint $Endpoint"
+        $script:MetroContext = [MetroAIContext]::new($Endpoint, $ApiType, $ApiVersion)
     }
 }
+
+
 
 function Get-MetroAIContext {
     if ($script:MetroContext) {
@@ -60,11 +91,8 @@ function Get-MetroAIContext {
 function Get-MetroAuthHeader {
     <#
     .SYNOPSIS
-        Returns a header hashtable with an authorization token for the specified API type.
-    .PARAMETER ApiType
-        The API type: Agent or Assistant.
-    .OUTPUTS
-        A hashtable suitable for use as HTTP headers.
+        Returns a header hashtable with an authorization token for the specified API type,
+        automatically choosing the right Azure resource URL for old vs new endpoints.
     #>
     param (
         [Parameter(Mandatory = $true)]
@@ -72,18 +100,41 @@ function Get-MetroAuthHeader {
         [string]$ApiType
     )
     try {
-        $AzContext = Get-AzContext -ErrorAction Stop
-        if (-not $AzContext) { throw "Not connected to Azure, connect with Connect-AzAccount." }
-        $resourceUrl = if ($ApiType -eq 'Agent') { "https://ml.azure.com/" } else { "https://cognitiveservices.azure.com" }
-        $token = (Get-AzAccessToken -ResourceUrl $resourceUrl -AsSecureString).Token | ConvertFrom-SecureString -AsPlainText
-        if (-not $token) { throw "Token retrieval failed." }
+        # make sure our context is set
+        if (-not $script:MetroContext) {
+            throw "No Metro AI context set. Use Set-MetroAIContext first."
+        }
+
+        # decide which resource to ask a token for
+        if ($script:MetroContext.UseNewApi) {
+            # unified new AI surface
+            $resourceUrl = "https://ai.azure.com/"
+        }
+        elseif ($ApiType -eq 'Agent') {
+            # old Agent endpoint
+            $resourceUrl = "https://ml.azure.com/"
+        }
+        else {
+            # old Assistant endpoint
+            $resourceUrl = "https://cognitiveservices.azure.com/"
+        }
+
+        # grab the token
+        $token = (Get-AzAccessToken -ResourceUrl $resourceUrl -AsSecureString).Token `
+        | ConvertFrom-SecureString -AsPlainText
+        if (-not $token) {
+            throw "Token retrieval failed for resource $resourceUrl"
+        }
+
+        # return the bare auth header;
+        # x-ms-enable-preview goes in Invoke-MetroAIApiCall so it’s applied on every request uniformly
         return @{ Authorization = "Bearer $token" }
     }
     catch {
         Write-Error "Get-MetroAuthHeader error for '$ApiType': $_"
-        break
     }
 }
+
 
 function Get-MetroApiVersion {
     <#
@@ -316,7 +367,7 @@ function New-MetroAIResource {
             Creates a new AI Foundry resource (Agent or Assistant).
         .DESCRIPTION
             This function creates a new AI agent or assistant using the specified model and instructions. It optionally reads instructions from a meta prompt file and, for Assistants, can attach file identifiers. If no resource name is provided, a default name is generated based on the current date and time.
-        .PARAMETER MetaPromptFile
+        .PARAMETER InstructionsFile
             The file path to a text file containing a meta prompt (instructions) for the resource. When provided, the contents are read and concatenated into a single string.
         .PARAMETER Model
             The identifier of the model to be used for the Metro AI resource.
@@ -331,23 +382,23 @@ function New-MetroAIResource {
     #>
     [Alias("New-MetroAIAgent")]
     [Alias("New-MetroAIAssistant")]
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'NoPrompt')]
     param (
-        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPromptFile')][string]$MetaPromptFile = "",
-        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPrompt')][string]$MetaPrompt = "",
+        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPromptFile')][string]$InstructionsFile = "",
+        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPrompt')][string]$Instructions = "",
         [Parameter(Mandatory = $true)] [string]$Model,
         [string[]]$FileIds,
         [Parameter(Mandatory = $false)] [string]$ResourceName = ""
     )
     try {
-        if (-not($PSBoundParameters['MetaPrompt'])) {
-            $metaPrompt = if ($MetaPromptFile) { (Get-Content -Path $MetaPromptFile -ErrorAction Stop) -join "`n" } else { "" }
+        if (-not($PSBoundParameters['Instructions'])) {
+            $Instructions = if ($InstructionsFile) { (Get-Content -Path $InstructionsFile -ErrorAction Stop) -join "`n" } else { "" }
         }
 
         if (-not $ResourceName) { $ResourceName = (Get-Date -Format ddMMyyHHmmss) + "-agent" }
         Write-Verbose "Creating resource with name: $ResourceName"
         $body = @{
-            instructions = $metaPrompt
+            instructions = $Instructions
             name         = $ResourceName
             tools        = @(
                 @{ type = "file_search" },
@@ -438,25 +489,50 @@ function Remove-MetroAIResource {
     #>
     [Alias("Remove-MetroAIAgent")]
     [Alias("Remove-MetroAIAssistant")]
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'All')]
     param (
-        [Parameter(Mandatory = $false, ParameterSetName = 'All')] [switch]$All,
-        [Parameter(Mandatory = $false, ParameterSetName = 'SingleAssistant')] [string]$AssistantId
+        [Parameter(
+            ParameterSetName = 'All',
+            Mandatory = $false)]
+        [switch]$All,
+
+        [Alias('id')]
+        [Parameter(
+            ParameterSetName = 'ById',
+            Mandatory = $true,
+            ValueFromPipelineByPropertyName = $true,
+            ValueFromPipeline = $true)]
+        [string]$AssistantId
     )
-    try {
-        if ($PSBoundParameters['AssistantId']) {
-            $resources = Get-MetroAIResource -AssistantId $AssistantId -Endpoint $Endpoint -ApiType $ApiType
-        }
-        else {
-            $resources = Get-MetroAIResource -Endpoint $Endpoint -ApiType $ApiType
-        }
-        foreach ($res in $resources) {
-            Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Path $res.id -Method Delete
+    begin {
+        $idsToDelete = @()
+    }
+
+    process {
+        if ($PSCmdlet.ParameterSetName -eq 'ById') {
+            $idsToDelete += $AssistantId
         }
     }
-    catch {
-        Write-Error "Remove-MetroAIResource error: $_"
+    end {
+        if ($PSCmdlet.ParameterSetName -eq 'All') {
+            $resources = Get-MetroAIResource
+            $idsToDelete = $resources.id
+        }
+        if ($idsToDelete.Count -eq 0) {
+            Write-Error "No resources to delete."
+            return
+        }
+        foreach ($id in $idsToDelete) {
+            try {
+                Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Path $id -Method Delete
+
+            }
+            catch {
+                Write-Error "Failed to delete resource with ID: $id. Error: $_"
+            }
+        }
     }
+
 }
 
 #endregion
