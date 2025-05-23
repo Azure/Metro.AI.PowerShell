@@ -22,10 +22,18 @@ Connect-AzAccount
 
 ### Setting Up MetroAI Context
 
-Retrieve the connection string from your Azure AI Foundry project, then configure Metro-AI:
+Retrieve the connection string or project uri from your Azure AI Foundry project, then configure Metro-AI:
 
+#### GA Version of Foundry
 ```powershell
-# Example project connection string
+# Example project URI (from GA version of foundry)
+Set-MetroAIContext -Endpoint https://aiservicesw3ba.services.ai.azure.com/api/projects/projectw3ba -ApiType Agent
+Get-MetroAIContext
+```
+
+#### Preview version of Foundry
+```powershell
+# Example project connection string (from preview version of foundry)
 $connectionString = "swedencentral.api.azureml.ms;80ffa654-da7f-4c46-8d9a-9ed75956766e;ai-foundry-workflows;admin-7818"
 
 Set-MetroAIContext -ConnectionString $connectionString -ApiType Agent
@@ -44,7 +52,7 @@ You should not provide personal opinions or make assumptions about the user.
 Always ask clarifying questions if the user's request is unclear.
 "@
 
-New-MetroAIAgent -ResourceName "myAgent" -Model gpt4o -MetaPrompt $instructions
+New-MetroAIAgent -ResourceName "myAgent" -Model gpt4o -Instrutions $instructions
 ```
 
 ### Creating and Managing Threads
