@@ -361,81 +361,813 @@ function Remove-MetroAIFiles {
 
 #region Resource Management
 
+
 function New-MetroAIResource {
     <#
-        .SYNOPSIS
-            Creates a new AI Foundry resource (Agent or Assistant).
-        .DESCRIPTION
-            This function creates a new AI agent or assistant using the specified model and instructions. It optionally reads instructions from a meta prompt file and, for Assistants, can attach file identifiers. If no resource name is provided, a default name is generated based on the current date and time.
-        .PARAMETER InstructionsFile
-            The file path to a text file containing a meta prompt (instructions) for the resource. When provided, the contents are read and concatenated into a single string.
-        .PARAMETER Model
-            The identifier of the model to be used for the Metro AI resource.
-        .PARAMETER FileIds
-            (Optional) An array of file identifiers to attach to the resource when the ApiType is 'Assistant'.
-        .PARAMETER ResourceName
-            (Optional) The desired name for the resource. If not provided, a default name is generated automatically.
-        .EXAMPLE
-            New-MetroAIResource -Model "gpt-4" -Endpoint "https://example.azure.com" -ApiType Assistant -MetaPromptFile "C:\path\to\prompt.txt" -FileIds @("file1", "file2")
-        .NOTES
-            Ensure that the Endpoint is reachable and you have the necessary permissions. The generated resource name is based on the current date and time if none is provided.
+    .SYNOPSIS
+        Creates a new Metro AI agent or assistant resource with comprehensive tool support.
+    .DESCRIPTION
+        Creates an Azure AI agent or assistant with various tools including connected agents, code interpreter,
+        file search, Azure AI Search, custom functions, and OpenAPI integrations.
+        Follows Azure best practices for parameter validation, error handling, and resource management.
+        Note: Bing grounding must be added after creation using Set-MetroAIResource.
+    .PARAMETER Model
+        The model identifier (e.g., 'gpt-4', 'gpt-4-turbo', 'gpt-35-turbo').
+    .PARAMETER Name
+        The name of the agent/assistant resource. Must be unique within the workspace.
+    .PARAMETER Description
+        Optional description for the resource (max 512 characters).
+    .PARAMETER Instructions
+        System instructions that guide the agent's behavior (max 256,000 characters).
+    .PARAMETER Metadata
+        Optional metadata as key-value pairs (max 16 pairs, keys/values max 64 chars each).
+    .PARAMETER ResponseFormat
+        Response format specification. Use 'text' or structured format definitions.
+    .PARAMETER Temperature
+        Sampling temperature between 0.0 (deterministic) and 2.0 (most random). Default is 1.0.
+    .PARAMETER TopP
+        Nucleus sampling parameter between 0.0 and 1.0. Alternative to temperature.
+    .PARAMETER EnableConnectedAgent
+        Enable a single connected agent tool.
+    .PARAMETER ConnectedAgentId
+        ID of the connected agent. Required when EnableConnectedAgent is used.
+    .PARAMETER ConnectedAgentName
+        Display name for the connected agent. Required when EnableConnectedAgent is used.
+    .PARAMETER ConnectedAgentDescription
+        Description of the connected agent's capabilities. Required when EnableConnectedAgent is used.
+    .PARAMETER ConnectedAgentsDefinition
+        Array of connected agent definitions. Each must have 'id', 'name', and 'description' properties.
+    .PARAMETER EnableCodeInterpreter
+        Enable Python code execution capabilities.
+    .PARAMETER CodeInterpreterFileIds
+        Array of file IDs to make available to the code interpreter.
+    .PARAMETER EnableFileSearch
+        Enable file search capabilities across vector stores.
+    .PARAMETER FileSearchVectorStoreIds
+        Array of vector store IDs for file search operations.
+    .PARAMETER EnableAzureAiSearch
+        Enable Azure AI Search integration.
+    .PARAMETER AzureAiSearchIndexes
+        Array of Azure AI Search index configurations.
+    .PARAMETER EnableFunctionTool
+        Enable custom function calling.
+    .PARAMETER FunctionName
+        Name of the custom function.
+    .PARAMETER FunctionDescription
+        Description of what the function does.
+    .PARAMETER FunctionParameters
+        JSON Schema defining the function's parameters.
+    .PARAMETER EnableOpenApi
+        Enable OpenAPI/REST API integration.
+    .PARAMETER OpenApiDefinitionFile
+        Path to the OpenAPI specification file (JSON format only).
+    .PARAMETER OpenApiName
+        Friendly name for the OpenAPI integration.
+    .PARAMETER OpenApiDescription
+        Description of the OpenAPI service.
+    .PARAMETER OpenApiAuthType
+        Authentication method: 'Anonymous', 'Connection', or 'ManagedIdentity'.
+    .PARAMETER OpenApiConnectionId
+        Connection ID for API authentication when using 'Connection' auth type.
+    .PARAMETER OpenApiManagedAudience
+        Target audience URI when using 'ManagedIdentity' auth type.
+    .EXAMPLE
+        New-MetroAIResource -Model 'gpt-4' -Name 'MyAssistant' -Description 'General purpose assistant'
+    .EXAMPLE
+        New-MetroAIResource -Model 'gpt-4' -Name 'CodeHelper' -EnableCodeInterpreter -CodeInterpreterFileIds @('file-123')
+    .EXAMPLE
+        # Create assistant, then add Bing grounding
+        $assistant = New-MetroAIResource -Model 'gpt-4' -Name 'SearchBot'
+        Set-MetroAIResource -AssistantId $assistant.id -EnableBingGrounding -BingConnectionId 'bing-search-connection'
+    .EXAMPLE
+        # Multi-tool agent with various capabilities
+        New-MetroAIResource -Model 'gpt-4' -Name 'MultiToolAgent' `
+            -EnableCodeInterpreter -CodeInterpreterFileIds @('file-123') `
+            -EnableAzureAiSearch -AzureAiSearchIndexes @(@{ index_connection_id='search-conn'; index_name='docs'; query_type='semantic'; top_k=5 })
+    .NOTES
+        Requires Set-MetroAIContext to be called first. Follow Azure AI responsible AI guidelines.
+        To add Bing grounding, use Set-MetroAIResource with -EnableBingGrounding after creation.
     #>
     [Alias("New-MetroAIAgent")]
     [Alias("New-MetroAIAssistant")]
-    [CmdletBinding(DefaultParameterSetName = 'NoPrompt')]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low')]
     param (
-        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPromptFile')][string]$InstructionsFile = "",
-        [Parameter(Mandatory = $false, ParameterSetName = 'MetaPrompt')][string]$Instructions = "",
-        [Parameter(Mandatory = $true)] [string]$Model,
-        [string[]]$FileIds,
-        [Parameter(Mandatory = $false)] [string]$ResourceName = ""
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [ValidateLength(1, 256)]
+        [string]$Model,
+
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [ValidateLength(1, 256)]
+        [Alias('ResourceName')]
+        [string]$Name,
+
+        [ValidateLength(0, 512)]
+        [string]$Description,
+
+        [ValidateLength(0, 256000)]
+        [string]$Instructions,
+
+        [ValidateScript({
+                if ($_.Count -gt 16) { throw "Maximum 16 metadata entries allowed" }
+                foreach ($key in $_.Keys) {
+                    if ($key.Length -gt 64) { throw "Metadata key '$key' exceeds 64 character limit" }
+                    if ($_[$key].ToString().Length -gt 512) { throw "Metadata value for '$key' exceeds 512 character limit" }
+                }
+                return $true
+            })]
+        [hashtable]$Metadata,
+
+        [string]$ResponseFormat,
+
+        [ValidateRange(0.0, 2.0)]
+        [double]$Temperature,
+
+        [ValidateRange(0.0, 1.0)]
+        [double]$TopP,
+
+        # Connected Agent Parameters
+        [switch]$EnableConnectedAgent,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ConnectedAgentId,
+
+        [ValidateLength(1, 256)]
+        [string]$ConnectedAgentName,
+
+        [ValidateLength(1, 512)]
+        [string]$ConnectedAgentDescription,
+
+        [ValidateScript({
+                foreach ($agent in $_) {
+                    if (-not ($agent.id -and $agent.name -and $agent.description)) {
+                        throw "Each ConnectedAgentsDefinition entry must include 'id', 'name', and 'description' properties"
+                    }
+                    if ($agent.name.Length -gt 256) { throw "Connected agent name exceeds 256 characters" }
+                    if ($agent.description.Length -gt 512) { throw "Connected agent description exceeds 512 characters" }
+                }
+                return $true
+            })]
+        [object[]]$ConnectedAgentsDefinition,
+
+        # Code Interpreter Parameters
+        [switch]$EnableCodeInterpreter,
+
+        [ValidateCount(0, 20)]
+        [string[]]$CodeInterpreterFileIds,
+
+        # File Search Parameters
+        [switch]$EnableFileSearch,
+
+        [ValidateCount(1, 1)]
+        [string[]]$FileSearchVectorStoreIds,
+
+        # Azure AI Search Parameters
+        [switch]$EnableAzureAiSearch,
+
+        [ValidateScript({
+                foreach ($index in $_) {
+                    $requiredProps = @('index_connection_id', 'index_name')
+                    foreach ($prop in $requiredProps) {
+                        if (-not $index.$prop) { throw "Azure AI Search index missing required property: $prop" }
+                    }
+                }
+                return $true
+            })]
+        [object[]]$AzureAiSearchIndexes,
+
+        # Function Tool Parameters
+        [switch]$EnableFunctionTool,
+
+        [ValidatePattern('^[a-zA-Z0-9_-]+$')]
+        [ValidateLength(1, 64)]
+        [string]$FunctionName,
+
+        [ValidateLength(1, 1024)]
+        [string]$FunctionDescription,
+
+        [ValidateScript({
+                if ($_.type -ne 'object') { throw "Function parameters must have type 'object'" }
+                if (-not $_.properties) { throw "Function parameters must include 'properties'" }
+                return $true
+            })]
+        [hashtable]$FunctionParameters,
+
+        # OpenAPI Parameters
+        [switch]$EnableOpenApi,
+
+        [ValidateScript({
+                if (-not (Test-Path $_ -PathType Leaf)) { throw "OpenAPI definition file not found: $_" }
+                $extension = [System.IO.Path]::GetExtension($_).ToLower()
+                if ($extension -ne '.json') {
+                    throw "OpenAPI file must be JSON format (.json). YAML is not supported."
+                }
+                return $true
+            })]
+        [string]$OpenApiDefinitionFile,
+
+        [ValidateLength(1, 64)]
+        [string]$OpenApiName,
+
+        [ValidateLength(1, 1024)]
+        [string]$OpenApiDescription,
+
+        [ValidateSet('Anonymous', 'Connection', 'ManagedIdentity')]
+        [string]$OpenApiAuthType,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$OpenApiConnectionId,
+
+        [ValidatePattern('^https?://')]
+        [string]$OpenApiManagedAudience
     )
-    try {
-        if (-not($PSBoundParameters['Instructions'])) {
-            $Instructions = if ($InstructionsFile) { (Get-Content -Path $InstructionsFile -ErrorAction Stop) -join "`n" } else { "" }
+
+    begin {
+        Write-Verbose "Starting New-MetroAIResource with Model: $Model, Name: $Name"
+
+        # Ensure context is set
+        if (-not $script:MetroContext) {
+            throw "Metro AI context not set. Use Set-MetroAIContext first."
         }
 
-        if (-not $ResourceName) { $ResourceName = (Get-Date -Format ddMMyyHHmmss) + "-agent" }
-        Write-Verbose "Creating resource with name: $ResourceName"
-        $body = @{
-            instructions = $Instructions
-            name         = $ResourceName
-            tools        = @(
-                @{ type = "file_search" },
-                @{ type = "code_interpreter" }
-            )
-            model        = $Model
-        }
-        if ($ApiType -eq 'Assistant' -and $FileIds) { $body.file_ids = $FileIds }
-        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Method Post -ContentType "application/json" -Body $body
+        Write-Verbose "Using $($script:MetroContext.ApiType) API at $($script:MetroContext.Endpoint)"
     }
-    catch {
-        Write-Error "New-MetroAIResource error: $_"
+
+    process {
+        try {
+            # Enhanced parameter validation with detailed error messages
+            if ($EnableConnectedAgent -and $ConnectedAgentsDefinition) {
+                throw "Cannot use both -EnableConnectedAgent and -ConnectedAgentsDefinition simultaneously. Choose one approach."
+            }
+
+            if ($EnableConnectedAgent) {
+                $requiredParams = @('ConnectedAgentId', 'ConnectedAgentName', 'ConnectedAgentDescription')
+                foreach ($param in $requiredParams) {
+                    if (-not $PSBoundParameters[$param]) {
+                        throw "Parameter '$param' is required when using -EnableConnectedAgent."
+                    }
+                }
+
+                # Validate connected agent exists with detailed error handling
+                Write-Verbose "Validating connected agent: $ConnectedAgentId"
+                try {
+                    $connectedAgent = Get-MetroAIResource -AssistantId $ConnectedAgentId -ErrorAction Stop
+                    Write-Verbose "Connected agent '$($connectedAgent.name)' validated successfully"
+                }
+                catch {
+                    throw "Connected agent '$ConnectedAgentId' not found or inaccessible. Verify the ID exists and you have access: $($_.Exception.Message)"
+                }
+            }
+
+            if ($ConnectedAgentsDefinition) {
+                Write-Verbose "Validating $($ConnectedAgentsDefinition.Count) connected agents"
+                foreach ($agent in $ConnectedAgentsDefinition) {
+                    try {
+                        $connectedAgent = Get-MetroAIResource -AssistantId $agent.id -ErrorAction Stop
+                        Write-Verbose "Connected agent '$($agent.name)' (ID: $($agent.id)) validated successfully"
+                    }
+                    catch {
+                        throw "Connected agent '$($agent.id)' not found or inaccessible. Verify the ID exists and you have access: $($_.Exception.Message)"
+                    }
+                }
+            }
+
+            # Tool-specific validation with helpful error messages
+            if ($EnableCodeInterpreter -and -not $CodeInterpreterFileIds) {
+                throw "CodeInterpreterFileIds parameter is required when EnableCodeInterpreter is specified. Provide an array of file IDs or use an empty array @() if no files are needed initially."
+            }
+
+            if ($EnableFileSearch -and -not $FileSearchVectorStoreIds) {
+                throw "FileSearchVectorStoreIds parameter is required when EnableFileSearch is specified."
+            }
+
+            if ($EnableAzureAiSearch -and -not $AzureAiSearchIndexes) {
+                throw "CodeInterpreterFileIds parameter is required when EnableCodeInterpreter is specified. Provide an array of file IDs or use an empty array @() if no files are needed initially."
+            }
+
+            if ($EnableFileSearch -and -not $FileSearchVectorStoreIds) {
+                throw "FileSearchVectorStoreIds parameter is required when EnableFileSearch is specified."
+            }
+
+            if ($EnableAzureAiSearch -and -not $AzureAiSearchIndexes) {
+                throw "AzureAiSearchIndexes parameter is required when EnableAzureAiSearch is specified."
+            }
+
+            if ($EnableFunctionTool) {
+                $requiredFuncParams = @('FunctionName', 'FunctionDescription', 'FunctionParameters')
+                foreach ($param in $requiredFuncParams) {
+                    if (-not $PSBoundParameters[$param]) {
+                        throw "Parameter '$param' is required when using -EnableFunctionTool"
+                    }
+                }
+            }
+
+            if ($EnableOpenApi) {
+                $requiredApiParams = @('OpenApiDefinitionFile', 'OpenApiName', 'OpenApiDescription', 'OpenApiAuthType')
+                foreach ($param in $requiredApiParams) {
+                    if (-not $PSBoundParameters[$param]) {
+                        throw "Parameter '$param' is required when using -EnableOpenApi"
+                    }
+                }
+
+                if ($OpenApiAuthType -eq 'Connection' -and -not $OpenApiConnectionId) {
+                    throw "OpenApiConnectionId is required when OpenApiAuthType is 'Connection'"
+                }
+
+                if ($OpenApiAuthType -eq 'ManagedIdentity' -and -not $OpenApiManagedAudience) {
+                    throw "OpenApiManagedAudience is required when OpenApiAuthType is 'ManagedIdentity'"
+                }
+            }
+
+            if ($EnableBingGrounding -and -not $BingConnectionId) {
+                throw "BingConnectionId is required when EnableBingGrounding is specified. Only connection-based authentication is supported for Bing grounding."
+            }
+
+            # Temperature and TopP mutual exclusivity check
+            if ($PSBoundParameters.ContainsKey('Temperature') -and $PSBoundParameters.ContainsKey('TopP')) {
+                Write-Warning "Both Temperature and TopP specified. The API may use only one. Consider using only Temperature or only TopP for predictable behavior."
+            }
+
+            # Build request body with proper null checking
+            $body = @{
+                model = $Model
+                name  = $Name
+            }
+
+            # Add optional core properties only if they have values
+            if ($Description) { $body.description = $Description }
+            if ($Instructions) { $body.instructions = $Instructions }
+            if ($Metadata -and $Metadata.Count -gt 0) { $body.metadata = $Metadata }
+            if ($ResponseFormat) { $body.response_format = $ResponseFormat }
+            if ($PSBoundParameters.ContainsKey('Temperature')) { $body.temperature = $Temperature }
+            if ($PSBoundParameters.ContainsKey('TopP')) { $body.top_p = $TopP }
+
+            # Assemble tools and resources using Lists for better performance
+            $tools = [System.Collections.Generic.List[hashtable]]::new()
+            $toolResources = @{}
+
+            # Connected Agent Tools
+            if ($EnableConnectedAgent) {
+                $tools.Add(@{
+                        type            = 'connected_agent'
+                        connected_agent = @{
+                            id          = $ConnectedAgentId
+                            name        = $ConnectedAgentName
+                            description = $ConnectedAgentDescription
+                        }
+                    })
+                Write-Verbose "Added connected agent tool: $ConnectedAgentName"
+            }
+
+            if ($ConnectedAgentsDefinition) {
+                foreach ($agent in $ConnectedAgentsDefinition) {
+                    $tools.Add(@{
+                            type            = 'connected_agent'
+                            connected_agent = @{
+                                id          = $agent.id
+                                name        = $agent.name
+                                description = $agent.description
+                            }
+                        })
+                    Write-Verbose "Added connected agent tool: $($agent.name)"
+                }
+            }
+
+            # Code Interpreter Tool
+            if ($EnableCodeInterpreter) {
+                $tools.Add(@{ type = 'code_interpreter' })
+                if ($CodeInterpreterFileIds -and $CodeInterpreterFileIds.Count -gt 0) {
+                    $toolResources.code_interpreter = @{ file_ids = $CodeInterpreterFileIds }
+                    Write-Verbose "Added code interpreter tool with $($CodeInterpreterFileIds.Count) files"
+                }
+                else {
+                    Write-Verbose "Added code interpreter tool with no initial files"
+                }
+            }
+
+            # File Search Tool
+            if ($EnableFileSearch) {
+                $tools.Add(@{ type = 'file_search' })
+                $toolResources.file_search = @{ vector_store_ids = $FileSearchVectorStoreIds }
+                Write-Verbose "Added file search tool with $($FileSearchVectorStoreIds.Count) vector stores"
+            }
+
+            # Azure AI Search Tool
+            if ($EnableAzureAiSearch) {
+                $tools.Add(@{ type = 'azure_ai_search' })
+                $toolResources.azure_ai_search = @{ indexes = $AzureAiSearchIndexes }
+                Write-Verbose "Added Azure AI Search tool with $($AzureAiSearchIndexes.Count) indexes"
+            }
+
+            # Function Tool
+            if ($EnableFunctionTool) {
+                $tools.Add(@{
+                        type     = 'function'
+                        function = @{
+                            name        = $FunctionName
+                            description = $FunctionDescription
+                            parameters  = $FunctionParameters
+                        }
+                    })
+                Write-Verbose "Added function tool: $FunctionName"
+            }
+
+            # OpenAPI Tool
+            if ($EnableOpenApi) {
+                Write-Verbose "Loading OpenAPI specification from: $OpenApiDefinitionFile"
+
+                try {
+                    $specContent = Get-Content -Path $OpenApiDefinitionFile -Raw -ErrorAction Stop
+                    $spec = $specContent | ConvertFrom-Json -ErrorAction Stop
+
+                    $auth = switch ($OpenApiAuthType) {
+                        'Anonymous' { @{ type = 'anonymous' } }
+                        'Connection' { @{ type = 'connection'; connection_id = $OpenApiConnectionId } }
+                        'ManagedIdentity' { @{ type = 'managed_identity'; security_scheme = @{ audience = $OpenApiManagedAudience } } }
+                    }
+
+                    $tools.Add(@{
+                            type    = 'openapi'
+                            openapi = @{
+                                name        = $OpenApiName
+                                description = $OpenApiDescription
+                                spec        = $spec
+                                auth        = $auth
+                            }
+                        })
+                    Write-Verbose "Added OpenAPI tool: $OpenApiName ($OpenApiAuthType auth)"
+                }
+                catch {
+                    throw "Failed to process OpenAPI definition file '$OpenApiDefinitionFile': $($_.Exception.Message)"
+                }
+            }
+
+            # Bing Grounding Tool - Connection-based only with correct payload structure
+            if ($EnableBingGrounding) {
+                Write-Verbose "Configuring Bing grounding tool with connection: $BingConnectionId"
+
+                $tools.Add(@{
+                        type           = 'bing_grounding'
+                        bing_grounding = @{
+                            connections = @(
+                                @{
+                                    connection_id = $BingConnectionId
+                                }
+                            )
+                        }
+                    })
+                Write-Verbose "Added Bing grounding tool with connection ID: $BingConnectionId"
+            }
+
+            # Add tools and resources to body if any exist
+            if ($tools.Count -gt 0) {
+                $body.tools = $tools.ToArray()
+                Write-Verbose "Total tools configured: $($tools.Count)"
+            }
+
+            if ($toolResources.Count -gt 0) {
+                $body.tool_resources = $toolResources
+                Write-Verbose "Tool resources configured for: $($toolResources.Keys -join ', ')"
+            }
+
+            # Create resource with confirmation
+            $resourceType = $script:MetroContext.ApiType
+            $confirmMessage = "Create new $resourceType '$Name' with model '$Model'"
+            if ($tools.Count -gt 0) {
+                $toolsList = ($tools | ForEach-Object { $_.type }) -join ', '
+                $confirmMessage += " and tools: $toolsList"
+            }
+
+            if ($PSCmdlet.ShouldProcess($confirmMessage, "New-MetroAIResource")) {
+                Write-Verbose "Creating $resourceType resource..."
+                Write-Verbose "Request payload: $($body | ConvertTo-Json -Depth 10 -Compress)"
+
+                $invokeParams = @{
+                    Service     = 'assistants'
+                    Operation   = 'create'
+                    Method      = 'Post'
+                    ContentType = 'application/json'
+                    Body        = $body
+                }
+
+                $result = Invoke-MetroAIApiCall @invokeParams
+
+                if ($result -and $result.id) {
+                    Write-Information "Successfully created $resourceType '$Name' with ID: $($result.id)" -InformationAction Continue
+
+                    # Add some useful output for the user
+                    if ($tools.Count -gt 0) {
+                        Write-Information "Configured tools: $($tools | ForEach-Object { $_.type })" -InformationAction Continue
+                    }
+
+                    Write-Verbose "Resource creation completed successfully"
+                    return $result
+                }
+                else {
+                    throw "Resource creation appeared to succeed but no ID was returned in the response. This may indicate a service issue."
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to create Metro AI resource '$Name': $($_.Exception.Message)"
+            Write-Error $errorMessage -ErrorAction Stop
+        }
     }
 }
 
+
 function Set-MetroAIResource {
+    <#
+    .SYNOPSIS
+        Updates an existing Metro AI agent or assistant resource with comprehensive tool support.
+    .DESCRIPTION
+        Updates an Azure AI agent or assistant with various tools including connected agents, code interpreter,
+        file search, Azure AI Search, custom functions, OpenAPI integrations, and Bing grounding.
+        Can update from JSON file or specify individual parameters.
+    .PARAMETER AssistantId
+        The ID of the agent/assistant resource to update.
+    .PARAMETER InputFile
+        Path to a JSON file containing the complete resource definition to update.
+    .PARAMETER Model
+        The model identifier (e.g., 'gpt-4', 'gpt-4-turbo', 'gpt-35-turbo').
+    .PARAMETER Name
+        The name of the agent/assistant resource.
+    .PARAMETER Description
+        Optional description for the resource (max 512 characters).
+    .PARAMETER Instructions
+        System instructions that guide the agent's behavior (max 256,000 characters).
+    .PARAMETER Metadata
+        Optional metadata as key-value pairs (max 16 pairs, keys/values max 64 chars each).
+    .PARAMETER ResponseFormat
+        Response format specification. Use 'text' or structured format definitions.
+    .PARAMETER Temperature
+        Sampling temperature between 0.0 (deterministic) and 2.0 (most random).
+    .PARAMETER TopP
+        Nucleus sampling parameter between 0.0 and 1.0. Alternative to temperature.
+    .PARAMETER EnableBingGrounding
+        Enable Bing search grounding for real-time information retrieval.
+    .PARAMETER BingConnectionId
+        Connection ID for Bing Search API. Required when EnableBingGrounding is used.
+    .PARAMETER AddBingGrounding
+        Switch to add Bing grounding to existing tools without replacing them.
+    .PARAMETER RemoveBingGrounding
+        Switch to remove Bing grounding from existing tools.
+    .PARAMETER ClearAllTools
+        Switch to remove all existing tools before applying new configuration.
+    .EXAMPLE
+        Set-MetroAIResource -AssistantId 'asst-123' -InputFile './updated-assistant.json'
+    .EXAMPLE
+        Set-MetroAIResource -AssistantId 'asst-123' -EnableBingGrounding -BingConnectionId 'bing-conn-1'
+    .EXAMPLE
+        Set-MetroAIResource -AssistantId 'asst-123' -AddBingGrounding -BingConnectionId 'bing-conn-1'
+    .EXAMPLE
+        Set-MetroAIResource -AssistantId 'asst-123' -RemoveBingGrounding
+    .NOTES
+        When using InputFile, individual parameters are ignored. Use AddBingGrounding to preserve existing tools.
+    #>
     [Alias("Set-MetroAIAgent")]
     [Alias("Set-MetroAIAssistant")]
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Parameters', SupportsShouldProcess, ConfirmImpact = 'Medium')]
     param (
-        [Parameter(Mandatory = $false, parameterSetName = 'AssistantId')][string]$AssistantId,
-        [Parameter(Mandatory = $true, parameterSetName = 'Json')][string]$InputFile = "",
-        [Parameter(Mandatory = $false, parameterSetName = 'AssistantId')][string]$Body = ""
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$AssistantId,
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'Json')]
+        [ValidateScript({
+                if (-not (Test-Path $_ -PathType Leaf)) { throw "Input file not found: $_" }
+                $extension = [System.IO.Path]::GetExtension($_).ToLower()
+                if ($extension -ne '.json') { throw "Input file must be JSON format (.json)" }
+                return $true
+            })]
+        [string]$InputFile,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Model,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateLength(1, 256)]
+        [string]$Name,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateLength(0, 512)]
+        [string]$Description,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateLength(0, 256000)]
+        [string]$Instructions,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateScript({
+                if ($_.Count -gt 16) { throw "Maximum 16 metadata entries allowed" }
+                foreach ($key in $_.Keys) {
+                    if ($key.Length -gt 64) { throw "Metadata key '$key' exceeds 64 character limit" }
+                    if ($_[$key].ToString().Length -gt 512) { throw "Metadata value for '$key' exceeds 512 character limit" }
+                }
+                return $true
+            })]
+        [hashtable]$Metadata,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [string]$ResponseFormat,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateRange(0.0, 2.0)]
+        [double]$Temperature,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateRange(0.0, 1.0)]
+        [double]$TopP,
+
+        # Bing Grounding Parameters
+        [Parameter(ParameterSetName = 'Parameters')]
+        [switch]$EnableBingGrounding,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateNotNullOrEmpty()]
+        [string]$BingConnectionId,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [switch]$AddBingGrounding,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [switch]$RemoveBingGrounding,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [switch]$ClearAllTools
     )
 
-    try {
-        if ($InputFile) {
-            Write-Verbose "Getting content from file: $InputFile"
-            $requestBody = Get-Content -Path $InputFile -Raw | ConvertFrom-Json -Depth 100 -NoEnumerate
-            $requestAssistantId = $requestBody.id
-            $requestBody = $requestBody | Select-Object -ExcludeProperty id, object, created_at
+    begin {
+        Write-Verbose "Starting Set-MetroAIResource for Assistant ID: $AssistantId"
+        
+        # Ensure context is set
+        if (-not $script:MetroContext) {
+            throw "Metro AI context not set. Use Set-MetroAIContext first."
         }
-
-        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Path $requestAssistantId -Method Post -ContentType "application/json" -Body $requestBody
     }
-    catch {
-        Write-Error "Set-MetroAIResource error: $_"
+
+    process {
+        try {
+            # Validate mutually exclusive Bing grounding options
+            $bingOptions = @($EnableBingGrounding, $AddBingGrounding, $RemoveBingGrounding) | Where-Object { $_ }
+            if ($bingOptions.Count -gt 1) {
+                throw "Cannot use multiple Bing grounding options simultaneously. Choose one: -EnableBingGrounding, -AddBingGrounding, or -RemoveBingGrounding."
+            }
+
+            # Validate Bing connection ID is provided when needed
+            if (($EnableBingGrounding -or $AddBingGrounding) -and -not $BingConnectionId) {
+                throw "BingConnectionId is required when using -EnableBingGrounding or -AddBingGrounding."
+            }
+
+            if ($PSCmdlet.ParameterSetName -eq 'Json') {
+                # Handle JSON file input
+                Write-Verbose "Processing input file: $InputFile"
+                
+                try {
+                    $requestBody = Get-Content -Path $InputFile -Raw -ErrorAction Stop | ConvertFrom-Json -Depth 100 -ErrorAction Stop
+                    Write-Verbose "Successfully parsed JSON input file"
+                }
+                catch {
+                    throw "Failed to parse JSON input file '$InputFile': $($_.Exception.Message)"
+                }
+
+                # Extract assistant ID from JSON if present, otherwise use parameter
+                $targetAssistantId = if ($requestBody.id) { $requestBody.id } else { $AssistantId }
+                
+                # Remove system-generated properties that shouldn't be updated
+                $requestBody = $requestBody | Select-Object -ExcludeProperty id, object, created_at
+
+                $confirmMessage = "Update assistant '$targetAssistantId' from file '$InputFile'"
+            }
+            else {
+                # Handle parameter-based updates
+                Write-Verbose "Processing parameter-based update"
+                
+                # Get current resource to preserve existing configuration
+                try {
+                    $currentResource = Get-MetroAIResource -AssistantId $AssistantId -ErrorAction Stop
+                    Write-Verbose "Retrieved current resource configuration"
+                }
+                catch {
+                    throw "Failed to retrieve current resource '$AssistantId': $($_.Exception.Message). Verify the ID exists and you have access."
+                }
+
+                $targetAssistantId = $AssistantId
+                $requestBody = @{}
+
+                # Preserve existing values and update only specified parameters
+                if ($Model) { $requestBody.model = $Model } else { $requestBody.model = $currentResource.model }
+                if ($Name) { $requestBody.name = $Name } else { $requestBody.name = $currentResource.name }
+                if ($PSBoundParameters.ContainsKey('Description')) { $requestBody.description = $Description } elseif ($currentResource.description) { $requestBody.description = $currentResource.description }
+                if ($PSBoundParameters.ContainsKey('Instructions')) { $requestBody.instructions = $Instructions } elseif ($currentResource.instructions) { $requestBody.instructions = $currentResource.instructions }
+                if ($PSBoundParameters.ContainsKey('Metadata')) { $requestBody.metadata = $Metadata } elseif ($currentResource.metadata) { $requestBody.metadata = $currentResource.metadata }
+                if ($PSBoundParameters.ContainsKey('ResponseFormat')) { $requestBody.response_format = $ResponseFormat } elseif ($currentResource.response_format) { $requestBody.response_format = $currentResource.response_format }
+                if ($PSBoundParameters.ContainsKey('Temperature')) { $requestBody.temperature = $Temperature } elseif ($null -ne $currentResource.temperature) { $requestBody.temperature = $currentResource.temperature }
+                if ($PSBoundParameters.ContainsKey('TopP')) { $requestBody.top_p = $TopP } elseif ($null -ne $currentResource.top_p) { $requestBody.top_p = $currentResource.top_p }
+
+                # Handle tools configuration
+                $currentTools = if ($currentResource.tools) { $currentResource.tools } else { @() }
+                $newTools = [System.Collections.Generic.List[object]]::new()
+
+                if ($ClearAllTools) {
+                    Write-Verbose "Clearing all existing tools"
+                    # Start with empty tools array
+                }
+                else {
+                    # Preserve existing tools unless specifically modifying Bing grounding
+                    foreach ($tool in $currentTools) {
+                        if ($tool.type -eq 'bing_grounding' -and ($EnableBingGrounding -or $AddBingGrounding -or $RemoveBingGrounding)) {
+                            # Skip existing Bing grounding tools when we're modifying them
+                            Write-Verbose "Removing existing Bing grounding tool for reconfiguration"
+                            continue
+                        }
+                        $newTools.Add($tool)
+                    }
+                }
+
+                # Add Bing grounding if requested
+                if ($EnableBingGrounding -or $AddBingGrounding) {
+                    Write-Verbose "Adding Bing grounding tool with connection: $BingConnectionId"
+                    
+                    $bingTool = @{
+                        type           = 'bing_grounding'
+                        bing_grounding = @{
+                            connections = @(
+                                @{
+                                    connection_id = $BingConnectionId
+                                }
+                            )
+                        }
+                    }
+                    $newTools.Add($bingTool)
+                    Write-Verbose "Added Bing grounding tool"
+                }
+
+                # Set tools in request body
+                $requestBody.tools = $newTools.ToArray()
+
+                # Preserve tool_resources if they exist
+                if ($currentResource.tool_resources) {
+                    $requestBody.tool_resources = $currentResource.tool_resources
+                }
+
+                # Build confirmation message
+                $confirmMessage = "Update assistant '$AssistantId'"
+                $changes = @()
+                
+                if ($Model -and $Model -ne $currentResource.model) { $changes += "model: $($currentResource.model) → $Model" }
+                if ($Name -and $Name -ne $currentResource.name) { $changes += "name: $($currentResource.name) → $Name" }
+                if ($EnableBingGrounding -or $AddBingGrounding) { $changes += "add Bing grounding" }
+                if ($RemoveBingGrounding) { $changes += "remove Bing grounding" }
+                if ($ClearAllTools) { $changes += "clear all tools" }
+                
+                if ($changes.Count -gt 0) {
+                    $confirmMessage += " with changes: $($changes -join ', ')"
+                }
+            }
+
+            # Execute the update with confirmation
+            if ($PSCmdlet.ShouldProcess($confirmMessage, "Set-MetroAIResource")) {
+                Write-Verbose "Updating resource..."
+                Write-Verbose "Request payload: $($requestBody | ConvertTo-Json -Depth 10 -Compress)"
+
+                $invokeParams = @{
+                    Service     = 'assistants'
+                    Operation   = 'create'
+                    Path        = $targetAssistantId
+                    Method      = 'Post'
+                    ContentType = 'application/json'
+                    Body        = $requestBody
+                }
+
+                $result = Invoke-MetroAIApiCall @invokeParams
+
+                if ($result -and $result.id) {
+                    Write-Information "Successfully updated assistant '$($result.id)'" -InformationAction Continue
+                    
+                    # Provide feedback about tools configuration
+                    if ($result.tools -and $result.tools.Count -gt 0) {
+                        $toolTypes = ($result.tools | ForEach-Object { $_.type }) -join ', '
+                        Write-Information "Current tools: $toolTypes" -InformationAction Continue
+                    }
+                    else {
+                        Write-Information "No tools configured" -InformationAction Continue
+                    }
+
+                    Write-Verbose "Resource update completed successfully"
+                    return $result
+                }
+                else {
+                    throw "Resource update appeared to succeed but no ID was returned in the response. This may indicate a service issue."
+                }
+            }
+        }
+        catch {
+            $errorMessage = "Failed to update Metro AI resource '$AssistantId': $($_.Exception.Message)"
+            Write-Error $errorMessage -ErrorAction Stop
+        }
     }
 }
 

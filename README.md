@@ -87,6 +87,112 @@ Get-MetroAIOutputFiles -FileId assistant-TqVaZqCx3ZcP6aR4eRay98 -LocalFilePath C
 
 You can now use the downloaded `ConnectToAzure.ps1` script to establish a connection to Azure.
 
+### Creating Specialized Agents with Proxy Agent Orchestration
+
+For complex scenarios involving multiple specialized agents, you can create a network of agents where a proxy agent coordinates with specialized agents:
+
+```powershell
+# Define specialized agents with their roles and instructions
+$specializedAgents = @{
+   # Market agent
+   "MarketAgent"     = @{
+      "Description"  = "Agent that provides market data and analysis."
+      "Instructions" = "Provide real-time market data and analysis to the proxy agent."
+   }
+   # Trading agent
+   "TradingAgent"    = @{
+      "Description"  = "Agent that executes trades based on market conditions."
+      "Instructions" = "Execute trades based on the analysis provided by the MarketAgent."
+   }
+   # Research agent
+   "ResearchAgent"   = @{
+      "Description"  = "Agent that conducts research and provides insights."
+      "Instructions" = "Conduct research and provide insights to the proxy agent."
+   }
+   # Compliance agent
+   "ComplianceAgent" = @{
+      "Description"  = "Agent that ensures compliance with regulations."
+      "Instructions" = "Ensure all actions taken by the proxy agent comply with relevant regulations."
+   }
+}
+
+# Create specialized agents
+$createdAgents = @()
+foreach ($agent in $specializedAgents.GetEnumerator()) {
+   $agentDetails = $specializedAgents[$agent.Key]
+   Write-Output "Creating agent: $($agent.Key)"
+   Write-Output "Description: $($agentDetails.Description)"
+   Write-Output "Instructions: $($agentDetails.Instructions)"
+
+   $createdAgents += New-MetroAIAgent -Model 'gpt-4.1' -Name $agent.Key -Instructions $agentDetails.Instructions -Description $agentDetails.Description -Verbose
+}
+
+# Create proxy agent that orchestrates the specialized agents
+$proxyAgent = New-MetroAIAgent -Model 'gpt-4.1' -Name 'ProxyAgent' `
+   -ConnectedAgentsDefinition ($createdAgents | Select-Object id, name, description) `
+   -Description 'Proxy agent that connects to specialized agents for market analysis, trading, research, and compliance.' `
+   -Instructions 'This agent will connect to specialized agents to perform tasks related to market analysis, trading, research, and compliance. Coordinate with the appropriate specialized agents based on the user request and ensure all compliance requirements are met.' `
+   -Verbose
+
+Write-Output "Created proxy agent with ID: $($proxyAgent.id)"
+```
+
+#### Using the Proxy Agent Network
+
+Once your agent network is established, you can interact with the proxy agent, which will coordinate with the specialized agents as needed:
+
+```powershell
+# Create a thread for the proxy agent
+$proxyThread = New-MetroAIThread
+
+# Send a complex request that requires multiple agents
+$complexMessage = Invoke-MetroAIMessage -ThreadID $proxyThread.id -Message @"
+I need to analyze the current market conditions for tech stocks,
+execute a small trade if conditions are favorable,
+research the regulatory implications,
+and ensure everything complies with current trading regulations.
+"@
+
+# Execute with the proxy agent
+$proxyRun = Start-MetroAIThreadRun -ThreadID $proxyThread.id -AssistantId $proxyAgent.id
+
+# Monitor the run status
+do {
+    Start-Sleep -Seconds 2
+    $runStatus = Get-MetroAIThreadRun -ThreadID $proxyThread.id -RunId $proxyRun.id
+    Write-Output "Run Status: $($runStatus.status)"
+} while ($runStatus.status -in @("queued", "in_progress"))
+
+# Get the coordinated response
+Get-MetroAIMessage -ThreadID $proxyThread.id
+```
+
+This approach allows you to build sophisticated AI workflows where different agents handle their specialized domains while a central proxy agent orchestrates the overall process.
+
+### Creating an Agent with Bing Grounding
+
+You can create an agent that uses Bing search to provide real-time web information by first creating the agent and then updating it with Bing grounding capabilities:
+
+```powershell
+# First, create the basic agent
+$researchAgent = New-MetroAIAgent -Model 'gpt-4.1' -Name 'WebResearchAgent' `
+   -Description 'Agent that can search the web for current information and provide research insights.' `
+   -Instructions @"
+You are a research assistant with access to current web information through Bing search.
+When users ask questions that require up-to-date information, use your web search capability to find relevant, recent information.
+Always cite your sources and indicate when information comes from web searches.
+Provide balanced, factual responses based on multiple sources when possible.
+"@ `
+   -Verbose
+
+# Then, update the agent to add Bing grounding capability
+# Use the full connection resource ID from your Azure AI Foundry project
+$bingConnectionId = "/subscriptions/{subscription-id}/resourceGroups/{resource-group-name}/providers/Microsoft.CognitiveServices/accounts/{cognitive-services-account}/projects/{project-name}/connections/{bing-connection-name}"
+Set-MetroAIAgent -AssistantId $researchAgent.id -EnableBingGrounding -BingConnectionId $bingConnectionId -Verbose
+```
+
+Now you can use this agent to get current web information for research tasks.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
