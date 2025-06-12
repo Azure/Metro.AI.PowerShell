@@ -460,6 +460,7 @@ function New-MetroAIResource {
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [ValidateLength(1, 256)]
+        [Alias('ResourceName')]
         [string]$Name,
 
         [ValidateLength(0, 512)]

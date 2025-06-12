@@ -171,8 +171,6 @@ This approach allows you to build sophisticated AI workflows where different age
 
 ### Creating an Agent with Bing Grounding
 
-### Creating an Agent with Bing Grounding
-
 You can create an agent that uses Bing search to provide real-time web information by first creating the agent and then updating it with Bing grounding capabilities:
 
 ```powershell
