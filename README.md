@@ -52,7 +52,7 @@ You should not provide personal opinions or make assumptions about the user.
 Always ask clarifying questions if the user's request is unclear.
 "@
 
-New-MetroAIAgent -ResourceName "myAgent" -Model gpt4o -Instrutions $instructions
+New-MetroAIAgent -ResourceName "myAgent" -Model gpt4o -Instructions $instructions
 ```
 
 ### Creating and Managing Threads
