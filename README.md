@@ -27,7 +27,7 @@ Retrieve the connection string or project uri from your Azure AI Foundry project
 #### GA Version of Foundry
 ```powershell
 # Example project URI (from GA version of foundry)
-Set-MetroAIContext -Endpoint https://aiservicesw3ba.services.ai.azure.com/api/projects/projectw3ba -ApiType Agent
+Set-MetroAIContext -Endpoint "https://aiservicesw3ba.services.ai.azure.com/api/projects/projectw3ba" -ApiType Agent
 Get-MetroAIContext
 ```
 
@@ -42,7 +42,7 @@ Get-MetroAIContext
 
 ### Creating a New Agent
 
-Define your agent's instructions and create a new Metro-AI agent using GPT-4o:
+Define your agent's instructions and create a new Metro-AI agent using GPT-4.1:
 
 ```powershell
 $instructions = @"
@@ -52,7 +52,158 @@ You should not provide personal opinions or make assumptions about the user.
 Always ask clarifying questions if the user's request is unclear.
 "@
 
-New-MetroAIAgent -ResourceName "myAgent" -Model gpt4o -Instrutions $instructions
+New-MetroAIAgent -ResourceName "myAgent" -Model "gpt-4.1" -Instructions $instructions
+```
+
+### Working with Existing Agents
+
+Metro.AI provides powerful pipeline support for managing existing agents, allowing you to easily copy, modify, and export agent configurations.
+
+#### Copying an Existing Agent
+
+You can create a new agent based on an existing one using PowerShell pipeline operations:
+
+```powershell
+# Get an existing agent and create a copy with a new name
+$originalAgent = Get-MetroAIAgent -AssistantId "asst_abc123"
+$copiedAgent = $originalAgent | New-MetroAIAgent -Name "CopiedAgent"
+
+# Copy with modifications - override specific properties while copying
+$enhancedAgent = $originalAgent | New-MetroAIAgent -Name "EnhancedAgent" `
+    -Model "gpt-4.1" `
+    -Description "Enhanced version of the original agent"
+
+Write-Output "Created new agent: $($enhancedAgent.name) with ID: $($enhancedAgent.id)"
+```
+
+#### Updating an Existing Agent
+
+You can modify an agent object and update it seamlessly:
+
+```powershell
+# Get an agent, modify its properties, and update it
+$agent = Get-MetroAIAgent -AssistantId "asst_abc123"
+$agent.Description = "Updated description for better clarity"
+$agent.Instructions = @"
+You are an expert PowerShell assistant. Help users with PowerShell scripting,
+automation, and Azure management tasks. Always provide working examples
+and explain best practices.
+"@
+
+# Update the agent with the modified properties
+$updatedAgent = $agent | Set-MetroAIAgent
+Write-Output "Updated agent: $($updatedAgent.name)"
+
+# You can also override specific properties during the update
+Get-MetroAIAgent -AssistantId "asst_abc123" | Set-MetroAIAgent -Name "NewName" -Temperature 0.5
+```
+
+#### Exporting and Importing Agent Configurations
+
+Export an agent configuration to JSON for backup, version control, or sharing:
+
+```powershell
+# Export an existing agent to JSON file
+$agent = Get-MetroAIAgent -AssistantId "asst_abc123"
+$agent | ConvertTo-Json -Depth 100 | Out-File -FilePath "./my-agent-backup.json" -Encoding UTF8
+
+Write-Output "Agent configuration exported to my-agent-backup.json"
+
+# Create a new agent from the exported JSON file
+$newAgentFromFile = New-MetroAIAgent -InputFile "./my-agent-backup.json"
+Write-Output "Created agent from file: $($newAgentFromFile.name) with ID: $($newAgentFromFile.id)"
+
+# Update an existing agent from a JSON file
+Set-MetroAIAgent -AssistantId "asst_xyz789" -InputFile "./my-agent-backup.json"
+```
+
+#### Advanced Agent Management Workflows
+
+Combine these operations for sophisticated agent management across different projects and environments:
+
+```powershell
+# Scenario 1: Copy agent from production to development project
+# First, connect to production environment
+Set-MetroAIContext -Endpoint "https://prod-ai.services.ai.azure.com/api/projects/prod-project" -ApiType Agent
+$prodAgent = Get-MetroAIAgent -AssistantId "asst_production_123"
+
+# Export production agent configuration
+$prodAgent | ConvertTo-Json -Depth 10 | Out-File -FilePath "./prod-agent-backup.json" -Encoding UTF8
+
+# Switch to development environment
+Set-MetroAIContext -Endpoint "https://dev-ai.services.ai.azure.com/api/projects/dev-project" -ApiType Agent
+
+# Create development version from production configuration
+$devAgent = New-MetroAIAgent -InputFile "./prod-agent-backup.json" | Set-MetroAIAgent -Name "DevAgent" -Temperature 0.8
+
+Write-Output "Created dev agent: $($devAgent.id) in development project"
+
+# Scenario 2: Multi-environment deployment from version-controlled configuration
+# Load agent configuration from version control
+$agentConfig = "./agents/customer-support-agent-v2.1.json"
+
+# Deploy to multiple environments with environment-specific modifications
+$environments = @{
+    "Development" = @{
+        Endpoint = "https://dev-ai.services.ai.azure.com/api/projects/dev-project"
+        Temperature = 0.8
+        Suffix = "-dev"
+    }
+    "Staging" = @{
+        Endpoint = "https://staging-ai.services.ai.azure.com/api/projects/staging-project"
+        Temperature = 0.5
+        Suffix = "-staging"
+    }
+    "Production" = @{
+        Endpoint = "https://prod-ai.services.ai.azure.com/api/projects/prod-project"
+        Temperature = 0.2
+        Suffix = ""
+    }
+}
+
+$deployedAgents = @{}
+foreach ($env in $environments.GetEnumerator()) {
+    Write-Output "Deploying to $($env.Key) environment..."
+
+    # Set context for target environment
+    Set-MetroAIContext -Endpoint $env.Value.Endpoint -ApiType Agent
+
+    # Deploy agent with environment-specific settings
+    $envAgent = New-MetroAIAgent -InputFile $agentConfig | Set-MetroAIAgent `
+        -Name "CustomerSupportAgent$($env.Value.Suffix)" `
+        -Temperature $env.Value.Temperature `
+        -Description "Customer support agent deployed to $($env.Key) environment"
+
+    $deployedAgents[$env.Key] = $envAgent
+    Write-Output "Deployed agent $($envAgent.id) to $($env.Key)"
+}
+
+# Scenario 3: Cross-region agent synchronization
+# Modern AI Foundry endpoints across different regions
+$regions = @{
+    "EastUS" = "https://eastus-ai.services.ai.azure.com/api/projects/global-project-eastus"
+    "WestEurope" = "https://westeurope-ai.services.ai.azure.com/api/projects/global-project-westeurope"
+    "SoutheastAsia" = "https://southeastasia-ai.services.ai.azure.com/api/projects/global-project-sea"
+}
+
+# Get master configuration from primary region (EastUS)
+Set-MetroAIContext -Endpoint $regions["EastUS"] -ApiType Agent
+$masterAgent = Get-MetroAIAgent -AssistantId "asst_master_123"
+$masterConfig = $masterAgent | ConvertTo-Json -Depth 10
+
+# Replicate to other regions
+foreach ($region in $regions.GetEnumerator()) {
+    if ($region.Key -eq "EastUS") { continue } # Skip primary region
+
+    Write-Output "Replicating to $($region.Key)..."
+    Set-MetroAIContext -Endpoint $region.Value -ApiType Agent
+
+    # Create regional copy with region-specific naming
+    $regionalAgent = $masterConfig | ConvertFrom-Json | New-MetroAIAgent -Name "GlobalAgent-$($region.Key)"
+    Write-Output "Created regional agent: $($regionalAgent.id) in $($region.Key)"
+}
+
+Write-Output "Agent replication completed across all regions"
 ```
 
 ### Creating and Managing Threads
