@@ -61,12 +61,12 @@ function Get-MetroAIContextCachePath {
     } else {
         $env:HOME
     }
-    
+
     $metroDir = Join-Path $profileDir '.metroai'
     if (-not (Test-Path $metroDir)) {
         $null = New-Item -ItemType Directory -Path $metroDir -Force
     }
-    
+
     return Join-Path $metroDir 'context.json'
 }
 
@@ -80,7 +80,7 @@ function Save-MetroAIContextCache {
         [Parameter(Mandatory)]
         [MetroAIContext]$Context
     )
-    
+
     try {
         $cachePath = Get-MetroAIContextCachePath
         $cacheData = @{
@@ -90,7 +90,7 @@ function Save-MetroAIContextCache {
             UseNewApi = $Context.UseNewApi
             CachedAt = (Get-Date).ToString('o')
         }
-        
+
         $cacheData | ConvertTo-Json -Depth 10 | Set-Content -Path $cachePath -Encoding UTF8 -Force
         Write-Verbose "Metro AI context cached to: $cachePath"
     }
@@ -106,25 +106,25 @@ function Get-MetroAIContextCache {
     #>
     [CmdletBinding()]
     param()
-    
+
     try {
         $cachePath = Get-MetroAIContextCachePath
         if (-not (Test-Path $cachePath)) {
             Write-Verbose "No Metro AI context cache found at: $cachePath"
             return $null
         }
-        
+
         $cacheData = Get-Content -Path $cachePath -Raw -Encoding UTF8 | ConvertFrom-Json
-        
+
         # Validate cache data has required properties
         if (-not ($cacheData.Endpoint -and $cacheData.ApiType)) {
             Write-Verbose "Invalid Metro AI context cache data"
             return $null
         }
-        
+
         # Create context from cached data
         $context = [MetroAIContext]::new($cacheData.Endpoint, $cacheData.ApiType, $cacheData.ApiVersion)
-        
+
         Write-Verbose "Loaded Metro AI context from cache: $($cacheData.ApiType) API at $($cacheData.Endpoint)"
         return $context
     }
@@ -141,7 +141,7 @@ function Clear-MetroAIContextCache {
     #>
     [CmdletBinding()]
     param()
-    
+
     try {
         $cachePath = Get-MetroAIContextCachePath
         if (Test-Path $cachePath) {
@@ -202,7 +202,7 @@ function Set-MetroAIContext {
         Save-MetroAIContextCache -Context $script:MetroContext
     }
 
-    Write-verbose "Metro AI context set for $ApiType API at $($script:MetroContext.Endpoint)" 
+    Write-verbose "Metro AI context set for $ApiType API at $($script:MetroContext.Endpoint)"
 }
 
 
@@ -214,10 +214,10 @@ function Get-MetroAIContext {
         # Try to load from cache
         Write-Verbose "No Metro AI context found in memory, attempting to load from cache"
         $cachedContext = Get-MetroAIContextCache
-        
+
         if ($cachedContext) {
             $script:MetroContext = $cachedContext
-            Write-Information "Loaded Metro AI context from cache: $($cachedContext.ApiType) API at $($cachedContext.Endpoint)" -InformationAction Continue
+            Write-Verbose "Loaded Metro AI context from cache: $($cachedContext.ApiType) API at $($cachedContext.Endpoint)"
             return $script:MetroContext
         }
         else {
@@ -316,11 +316,11 @@ function Set-CodeInterpreterConfiguration {
     param(
         [Parameter(Mandatory)]
         [object]$RequestBody,
-        
+
         [string[]]$ExistingFileIds = @(),
-        
+
         [string[]]$NewFileIds = @(),
-        
+
         [switch]$EnableCodeInterpreter
     )
 
@@ -343,7 +343,7 @@ function Set-CodeInterpreterConfiguration {
             $null = $fileIdsList.Add($fileId)
         }
         $codeInterpreterConfig = @{ file_ids = $fileIdsList.ToArray() }
-        
+
         if ($RequestBody.tool_resources -is [hashtable]) {
             $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
         } else {
@@ -358,7 +358,7 @@ function Set-CodeInterpreterConfiguration {
             $null = $fileIdsList.Add($fileId)
         }
         $codeInterpreterConfig = @{ file_ids = $fileIdsList.ToArray() }
-        
+
         if ($RequestBody.tool_resources -is [hashtable]) {
             $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
         } else {
@@ -368,7 +368,7 @@ function Set-CodeInterpreterConfiguration {
     } else {
         # No files, create empty file_ids array
         $codeInterpreterConfig = @{ file_ids = @() }
-        
+
         if ($RequestBody.tool_resources -is [hashtable]) {
             $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
         } else {
@@ -380,7 +380,7 @@ function Set-CodeInterpreterConfiguration {
     # Add code_interpreter tool if EnableCodeInterpreter is specified and not already present
     if ($EnableCodeInterpreter -and $RequestBody.tools) {
         $currentToolTypes = $RequestBody.tools | ForEach-Object { $_.type }
-        
+
         if ($currentToolTypes -notcontains "code_interpreter") {
             $newToolsList = [System.Collections.Generic.List[object]]::new()
             foreach ($tool in $RequestBody.tools) {
@@ -1566,7 +1566,7 @@ function Set-MetroAIResource {
                     # Add code_interpreter tool if EnableCodeInterpreter is specified and not already present
                     if ($EnableCodeInterpreter) {
                         $currentToolTypes = $newTools | ForEach-Object { $_.type }
-                        
+
                         if ($currentToolTypes -notcontains "code_interpreter") {
                             $newTools.Add(@{ type = "code_interpreter" })
                             Write-Verbose "Added code_interpreter tool"
@@ -1664,7 +1664,7 @@ function Set-MetroAIResource {
                     # Add code_interpreter tool if EnableCodeInterpreter is specified and not already present
                     if ($EnableCodeInterpreter) {
                         $currentToolTypes = $newTools | ForEach-Object { $_.type }
-                        
+
                         if ($currentToolTypes -notcontains "code_interpreter") {
                             $newTools.Add(@{ type = "code_interpreter" })
                             Write-Verbose "Added code_interpreter tool"
