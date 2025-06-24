@@ -1832,7 +1832,11 @@ function Start-MetroAIThreadWithMessages {
             } while ($runResult.status -ne "completed" -and $i -lt 100)
             if ($runResult.status -eq "completed") {
                 $result = Invoke-MetroAIApiCall -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $response.thread_id) -Method Get
-                return $result.data | ForEach-Object { $_.content.text }
+                $messages = $result.data | ForEach-Object { $_.content.text }
+                return @{
+                    ThreadID = $response.thread_id
+                    Messages = $messages
+                }
             }
             else { Write-Error "Thread run did not complete in time." }
         }
