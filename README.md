@@ -27,7 +27,7 @@ Retrieve the connection string or project uri from your Azure AI Foundry project
 #### GA Version of Foundry
 ```powershell
 # Example project URI (from GA version of foundry)
-Set-MetroAIContext -Endpoint "https://aiservicesw3ba.services.ai.azure.com/api/projects/projectw3ba" -ApiType Agent
+Set-MetroAIContext -Endpoint https://aiservicesw3ba.services.ai.azure.com/api/projects/projectw3ba -ApiType Agent
 Get-MetroAIContext
 ```
 

@@ -51,6 +51,109 @@ class MetroAIContext {
     }
 }
 
+function Get-MetroAIContextCachePath {
+    <#
+    .SYNOPSIS
+        Gets the path to the Metro AI context cache file.
+    #>
+    $profileDir = if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
+        [System.Environment]::GetFolderPath('ApplicationData')
+    } else {
+        $env:HOME
+    }
+    
+    $metroDir = Join-Path $profileDir '.metroai'
+    if (-not (Test-Path $metroDir)) {
+        $null = New-Item -ItemType Directory -Path $metroDir -Force
+    }
+    
+    return Join-Path $metroDir 'context.json'
+}
+
+function Save-MetroAIContextCache {
+    <#
+    .SYNOPSIS
+        Saves the current Metro AI context to cache.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [MetroAIContext]$Context
+    )
+    
+    try {
+        $cachePath = Get-MetroAIContextCachePath
+        $cacheData = @{
+            Endpoint = $Context.Endpoint
+            ApiType = $Context.ApiType
+            ApiVersion = $Context.ApiVersion
+            UseNewApi = $Context.UseNewApi
+            CachedAt = (Get-Date).ToString('o')
+        }
+        
+        $cacheData | ConvertTo-Json -Depth 10 | Set-Content -Path $cachePath -Encoding UTF8 -Force
+        Write-Verbose "Metro AI context cached to: $cachePath"
+    }
+    catch {
+        Write-Verbose "Failed to cache Metro AI context: $($_.Exception.Message)"
+    }
+}
+
+function Get-MetroAIContextCache {
+    <#
+    .SYNOPSIS
+        Loads Metro AI context from cache if available.
+    #>
+    [CmdletBinding()]
+    param()
+    
+    try {
+        $cachePath = Get-MetroAIContextCachePath
+        if (-not (Test-Path $cachePath)) {
+            Write-Verbose "No Metro AI context cache found at: $cachePath"
+            return $null
+        }
+        
+        $cacheData = Get-Content -Path $cachePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        
+        # Validate cache data has required properties
+        if (-not ($cacheData.Endpoint -and $cacheData.ApiType)) {
+            Write-Verbose "Invalid Metro AI context cache data"
+            return $null
+        }
+        
+        # Create context from cached data
+        $context = [MetroAIContext]::new($cacheData.Endpoint, $cacheData.ApiType, $cacheData.ApiVersion)
+        
+        Write-Verbose "Loaded Metro AI context from cache: $($cacheData.ApiType) API at $($cacheData.Endpoint)"
+        return $context
+    }
+    catch {
+        Write-Verbose "Failed to load Metro AI context cache: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Clear-MetroAIContextCache {
+    <#
+    .SYNOPSIS
+        Clears the Metro AI context cache.
+    #>
+    [CmdletBinding()]
+    param()
+    
+    try {
+        $cachePath = Get-MetroAIContextCachePath
+        if (Test-Path $cachePath) {
+            Remove-Item -Path $cachePath -Force
+            Write-Information "Metro AI context cache cleared" -InformationAction Continue
+        }
+    }
+    catch {
+        Write-Warning "Failed to clear Metro AI context cache: $($_.Exception.Message)"
+    }
+}
+
 function Set-MetroAIContext {
     [CmdletBinding(DefaultParameterSetName = 'Endpoint')]
     param (
@@ -66,7 +169,9 @@ function Set-MetroAIContext {
 
         [string]$ApiVersion,
 
-        [switch]$SkipValidation
+        [switch]$SkipValidation,
+
+        [switch]$NoCache
     )
 
     if ($PSCmdlet.ParameterSetName -eq 'ConnectionString') {
@@ -91,9 +196,13 @@ function Set-MetroAIContext {
             throw "Failed to validate Metro AI context. Please check your endpoint, connection string, and API type. Error: $($_.Exception.Message)"
         }
     }
-    else {
-        Write-Information "Metro AI context set for $ApiType API (validation skipped)" -InformationAction Continue
+
+    # Save to cache unless NoCache is specified
+    if (-not $NoCache) {
+        Save-MetroAIContextCache -Context $script:MetroContext
     }
+
+    Write-verbose "Metro AI context set for $ApiType API at $($script:MetroContext.Endpoint)" 
 }
 
 
@@ -102,7 +211,18 @@ function Get-MetroAIContext {
         return $script:MetroContext
     }
     else {
-        Write-Error "No Metro AI context set. Use Set-MetroAIContext to set it."
+        # Try to load from cache
+        Write-Verbose "No Metro AI context found in memory, attempting to load from cache"
+        $cachedContext = Get-MetroAIContextCache
+        
+        if ($cachedContext) {
+            $script:MetroContext = $cachedContext
+            Write-Information "Loaded Metro AI context from cache: $($cachedContext.ApiType) API at $($cachedContext.Endpoint)" -InformationAction Continue
+            return $script:MetroContext
+        }
+        else {
+            Write-Error "No Metro AI context set. Use Set-MetroAIContext to set it."
+        }
     }
 }
 
@@ -176,6 +296,100 @@ function Get-MetroApiVersion {
         'messages' { return '2024-05-01-preview' }
         'openapi' { return '2024-12-01-preview' }
         default { return '2024-05-01-preview' }
+    }
+}
+
+function Set-CodeInterpreterConfiguration {
+    <#
+    .SYNOPSIS
+        Helper function to configure Code Interpreter tool and resources for Set-MetroAIResource.
+    .PARAMETER RequestBody
+        The request body hashtable to modify.
+    .PARAMETER ExistingFileIds
+        Array of existing file IDs from the current resource.
+    .PARAMETER NewFileIds
+        Array of new file IDs to add.
+    .PARAMETER EnableCodeInterpreter
+        Whether to enable the Code Interpreter tool.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$RequestBody,
+        
+        [string[]]$ExistingFileIds = @(),
+        
+        [string[]]$NewFileIds = @(),
+        
+        [switch]$EnableCodeInterpreter
+    )
+
+    # Ensure tool_resources exists as hashtable
+    if (-not $RequestBody.tool_resources) {
+        if ($RequestBody -is [hashtable]) {
+            $RequestBody.tool_resources = @{}
+        } else {
+            $RequestBody | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value @{} -Force
+        }
+    }
+
+    # Handle file IDs merging
+    if ($NewFileIds -and $NewFileIds.Count -gt 0) {
+        # Merge existing file IDs with new ones, removing duplicates
+        $allFileIds = @($ExistingFileIds) + @($NewFileIds) | Select-Object -Unique
+        # Use ArrayList to ensure proper JSON serialization as array
+        $fileIdsList = [System.Collections.ArrayList]::new()
+        foreach ($fileId in $allFileIds) {
+            $null = $fileIdsList.Add($fileId)
+        }
+        $codeInterpreterConfig = @{ file_ids = $fileIdsList.ToArray() }
+        
+        if ($RequestBody.tool_resources -is [hashtable]) {
+            $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
+        } else {
+            $RequestBody.tool_resources | Add-Member -MemberType NoteProperty -Name "code_interpreter" -Value $codeInterpreterConfig -Force
+        }
+        Write-Verbose "Merged existing file IDs with new ones: $($fileIdsList.Count) total files"
+    } elseif ($ExistingFileIds.Count -gt 0) {
+        # Keep existing file IDs if no new ones provided
+        # Use ArrayList to ensure proper JSON serialization as array
+        $fileIdsList = [System.Collections.ArrayList]::new()
+        foreach ($fileId in $ExistingFileIds) {
+            $null = $fileIdsList.Add($fileId)
+        }
+        $codeInterpreterConfig = @{ file_ids = $fileIdsList.ToArray() }
+        
+        if ($RequestBody.tool_resources -is [hashtable]) {
+            $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
+        } else {
+            $RequestBody.tool_resources | Add-Member -MemberType NoteProperty -Name "code_interpreter" -Value $codeInterpreterConfig -Force
+        }
+        Write-Verbose "Preserved existing file IDs: $($ExistingFileIds.Count) files"
+    } else {
+        # No files, create empty file_ids array
+        $codeInterpreterConfig = @{ file_ids = @() }
+        
+        if ($RequestBody.tool_resources -is [hashtable]) {
+            $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
+        } else {
+            $RequestBody.tool_resources | Add-Member -MemberType NoteProperty -Name "code_interpreter" -Value $codeInterpreterConfig -Force
+        }
+        Write-Verbose "Created empty file_ids array for code interpreter"
+    }
+
+    # Add code_interpreter tool if EnableCodeInterpreter is specified and not already present
+    if ($EnableCodeInterpreter -and $RequestBody.tools) {
+        $currentToolTypes = $RequestBody.tools | ForEach-Object { $_.type }
+        
+        if ($currentToolTypes -notcontains "code_interpreter") {
+            $newToolsList = [System.Collections.Generic.List[object]]::new()
+            foreach ($tool in $RequestBody.tools) {
+                $newToolsList.Add($tool)
+            }
+            $newToolsList.Add(@{ type = "code_interpreter" })
+            $RequestBody.tools = $newToolsList.ToArray()
+            Write-Verbose "Added code_interpreter tool"
+        }
     }
 }
 
@@ -924,8 +1138,13 @@ function New-MetroAIResource {
                 # Code Interpreter Tool
                 if ($EnableCodeInterpreter) {
                     $tools.Add(@{ type = 'code_interpreter' })
-                    # Use empty array if no file IDs provided
-                    $fileIds = if ($CodeInterpreterFileIds) { $CodeInterpreterFileIds } else { @() }
+                    $fileIds = if ($CodeInterpreterFileIds -and $CodeInterpreterFileIds.Count -gt 0) {
+                        # Force array conversion using the comma operator to handle single items
+                        , $CodeInterpreterFileIds
+                    }
+                    else {
+                        @()
+                    }
                     $toolResources.code_interpreter = @{ file_ids = $fileIds }
                     Write-Verbose "Added code interpreter tool with $($fileIds.Count) files"
                 }
@@ -1193,6 +1412,16 @@ function Set-MetroAIResource {
         [ValidateRange(0.0, 1.0)]
         [double]$TopP,
 
+        # Code Interpreter Parameters
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [switch]$EnableCodeInterpreter,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [ValidateCount(0, 20)]
+        [string[]]$CodeInterpreterFileIds,
+
         # Bing Grounding Parameters
         [Parameter(ParameterSetName = 'Parameters')]
         [Parameter(ParameterSetName = 'InputObject')]
@@ -1289,16 +1518,42 @@ function Set-MetroAIResource {
                 if ($PSBoundParameters.ContainsKey('Temperature')) { $requestBody.temperature = $Temperature }
                 if ($PSBoundParameters.ContainsKey('TopP')) { $requestBody.top_p = $TopP }
 
+                # Handle Code Interpreter configuration for pipeline input
+                if ($EnableCodeInterpreter -or $CodeInterpreterFileIds) {
+                    # Get existing file IDs from current resource
+                    $existingFileIds = @()
+                    if ($requestBody.tool_resources -and $requestBody.tool_resources.code_interpreter -and $requestBody.tool_resources.code_interpreter.file_ids) {
+                        $existingFileIds = $requestBody.tool_resources.code_interpreter.file_ids
+                    }
+
+                    # Convert tool_resources to hashtable if it doesn't exist or recreate it
+                    $toolResourcesHash = @{}
+                    if ($requestBody.tool_resources) {
+                        # Convert existing tool_resources to hashtable
+                        $requestBody.tool_resources.PSObject.Properties | ForEach-Object {
+                            $toolResourcesHash[$_.Name] = $_.Value
+                        }
+                    }
+                    $requestBody | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value $toolResourcesHash -Force
+
+                    # Use helper function to configure Code Interpreter
+                    Set-CodeInterpreterConfiguration -RequestBody $requestBody -ExistingFileIds $existingFileIds -NewFileIds $CodeInterpreterFileIds -EnableCodeInterpreter:$EnableCodeInterpreter
+                }
+
                 # Handle tools configuration for pipeline input
                 $currentTools = if ($requestBody.tools) { $requestBody.tools } else { @() }
                 $newTools = [System.Collections.Generic.List[object]]::new()
 
                 if ($ClearAllTools) {
                     Write-Verbose "Clearing all existing tools"
-                    # Start with empty tools array
+                    # Start with empty tools array, but add code_interpreter if requested
+                    if ($EnableCodeInterpreter) {
+                        $newTools.Add(@{ type = "code_interpreter" })
+                        Write-Verbose "Added code_interpreter tool"
+                    }
                 }
                 else {
-                    # Preserve existing tools unless specifically modifying Bing grounding
+                    # Preserve existing tools unless specifically modifying them
                     foreach ($tool in $currentTools) {
                         if ($tool.type -eq 'bing_grounding' -and ($EnableBingGrounding -or $AddBingGrounding -or $RemoveBingGrounding)) {
                             # Skip existing Bing grounding tools when we're modifying them
@@ -1306,6 +1561,16 @@ function Set-MetroAIResource {
                             continue
                         }
                         $newTools.Add($tool)
+                    }
+
+                    # Add code_interpreter tool if EnableCodeInterpreter is specified and not already present
+                    if ($EnableCodeInterpreter) {
+                        $currentToolTypes = $newTools | ForEach-Object { $_.type }
+                        
+                        if ($currentToolTypes -notcontains "code_interpreter") {
+                            $newTools.Add(@{ type = "code_interpreter" })
+                            Write-Verbose "Added code_interpreter tool"
+                        }
                     }
                 }
 
@@ -1336,6 +1601,8 @@ function Set-MetroAIResource {
                 if ($PSBoundParameters.ContainsKey('Name')) { $changes += "name updated" }
                 if ($PSBoundParameters.ContainsKey('Description')) { $changes += "description updated" }
                 if ($PSBoundParameters.ContainsKey('Instructions')) { $changes += "instructions updated" }
+                if ($EnableCodeInterpreter) { $changes += "enable code interpreter" }
+                if ($CodeInterpreterFileIds) { $changes += "update code interpreter files" }
                 if ($EnableBingGrounding -or $AddBingGrounding) { $changes += "add Bing grounding" }
                 if ($RemoveBingGrounding) { $changes += "remove Bing grounding" }
                 if ($ClearAllTools) { $changes += "clear all tools" }
@@ -1377,10 +1644,14 @@ function Set-MetroAIResource {
 
                 if ($ClearAllTools) {
                     Write-Verbose "Clearing all existing tools"
-                    # Start with empty tools array
+                    # Start with empty tools array, but add code_interpreter if requested
+                    if ($EnableCodeInterpreter) {
+                        $newTools.Add(@{ type = "code_interpreter" })
+                        Write-Verbose "Added code_interpreter tool"
+                    }
                 }
                 else {
-                    # Preserve existing tools unless specifically modifying Bing grounding
+                    # Preserve existing tools unless specifically modifying them
                     foreach ($tool in $currentTools) {
                         if ($tool.type -eq 'bing_grounding' -and ($EnableBingGrounding -or $AddBingGrounding -or $RemoveBingGrounding)) {
                             # Skip existing Bing grounding tools when we're modifying them
@@ -1388,6 +1659,16 @@ function Set-MetroAIResource {
                             continue
                         }
                         $newTools.Add($tool)
+                    }
+
+                    # Add code_interpreter tool if EnableCodeInterpreter is specified and not already present
+                    if ($EnableCodeInterpreter) {
+                        $currentToolTypes = $newTools | ForEach-Object { $_.type }
+                        
+                        if ($currentToolTypes -notcontains "code_interpreter") {
+                            $newTools.Add(@{ type = "code_interpreter" })
+                            Write-Verbose "Added code_interpreter tool"
+                        }
                     }
                 }
 
@@ -1412,9 +1693,26 @@ function Set-MetroAIResource {
                 # Set tools in request body
                 $requestBody.tools = $newTools.ToArray()
 
-                # Preserve tool_resources if they exist
+                # Handle tool_resources properly by converting to hashtable
+                $toolResourcesHash = @{}
                 if ($currentResource.tool_resources) {
-                    $requestBody.tool_resources = $currentResource.tool_resources
+                    # Convert existing tool_resources to hashtable
+                    $currentResource.tool_resources.PSObject.Properties | ForEach-Object {
+                        $toolResourcesHash[$_.Name] = $_.Value
+                    }
+                }
+                $requestBody.tool_resources = $toolResourcesHash
+
+                # Handle Code Interpreter configuration for parameter-based updates
+                if ($EnableCodeInterpreter -or $CodeInterpreterFileIds) {
+                    # Get existing file IDs from current resource
+                    $existingFileIds = @()
+                    if ($currentResource.tool_resources -and $currentResource.tool_resources.code_interpreter -and $currentResource.tool_resources.code_interpreter.file_ids) {
+                        $existingFileIds = $currentResource.tool_resources.code_interpreter.file_ids
+                    }
+
+                    # Use helper function to configure Code Interpreter
+                    Set-CodeInterpreterConfiguration -RequestBody $requestBody -ExistingFileIds $existingFileIds -NewFileIds $CodeInterpreterFileIds -EnableCodeInterpreter:$EnableCodeInterpreter
                 }
 
                 # Build confirmation message
@@ -1423,6 +1721,8 @@ function Set-MetroAIResource {
 
                 if ($Model -and $Model -ne $currentResource.model) { $changes += "model: $($currentResource.model) → $Model" }
                 if ($Name -and $Name -ne $currentResource.name) { $changes += "name: $($currentResource.name) → $Name" }
+                if ($EnableCodeInterpreter) { $changes += "enable code interpreter" }
+                if ($CodeInterpreterFileIds) { $changes += "update code interpreter files" }
                 if ($EnableBingGrounding -or $AddBingGrounding) { $changes += "add Bing grounding" }
                 if ($RemoveBingGrounding) { $changes += "remove Bing grounding" }
                 if ($ClearAllTools) { $changes += "clear all tools" }
@@ -1897,6 +2197,14 @@ function Add-MetroAIAgentOpenAPIDefinition {
 }
 
 #endregion
+
+# Module initialization - try to load cached context
+$script:MetroContext = $null
+$cachedContext = Get-MetroAIContextCache
+if ($cachedContext) {
+    $script:MetroContext = $cachedContext
+    Write-Host "Metro AI context auto-loaded from cache: $($cachedContext.ApiType) API at $($cachedContext.Endpoint)" -ForegroundColor Green
+}
 
 # Export module members with the Metro prefix.
 Export-ModuleMember -Function * -Alias *
