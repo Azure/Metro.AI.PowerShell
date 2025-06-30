@@ -38,7 +38,7 @@ class MetroAIContext {
             # new surface: endpoint already includes /api/projects/{…}
             $base = "$($this.Endpoint)/$Service"
             if ($Path) { $base += "/$Path" }
-            $ver = if ($this.ApiVersion) { $this.ApiVersion } else { 'v1' }
+            $ver = if ($this.ApiVersion) { $this.ApiVersion } else { '2025-05-15-preview' }
             return "$base`?api-version=$ver"
         }
 
@@ -58,7 +58,8 @@ function Get-MetroAIContextCachePath {
     #>
     $profileDir = if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
         [System.Environment]::GetFolderPath('ApplicationData')
-    } else {
+    }
+    else {
         $env:HOME
     }
 
@@ -84,11 +85,11 @@ function Save-MetroAIContextCache {
     try {
         $cachePath = Get-MetroAIContextCachePath
         $cacheData = @{
-            Endpoint = $Context.Endpoint
-            ApiType = $Context.ApiType
+            Endpoint   = $Context.Endpoint
+            ApiType    = $Context.ApiType
             ApiVersion = $Context.ApiVersion
-            UseNewApi = $Context.UseNewApi
-            CachedAt = (Get-Date).ToString('o')
+            UseNewApi  = $Context.UseNewApi
+            CachedAt   = (Get-Date).ToString('o')
         }
 
         $cacheData | ConvertTo-Json -Depth 10 | Set-Content -Path $cachePath -Encoding UTF8 -Force
@@ -328,7 +329,8 @@ function Set-CodeInterpreterConfiguration {
     if (-not $RequestBody.tool_resources) {
         if ($RequestBody -is [hashtable]) {
             $RequestBody.tool_resources = @{}
-        } else {
+        }
+        else {
             $RequestBody | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value @{} -Force
         }
     }
@@ -346,11 +348,13 @@ function Set-CodeInterpreterConfiguration {
 
         if ($RequestBody.tool_resources -is [hashtable]) {
             $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
-        } else {
+        }
+        else {
             $RequestBody.tool_resources | Add-Member -MemberType NoteProperty -Name "code_interpreter" -Value $codeInterpreterConfig -Force
         }
         Write-Verbose "Merged existing file IDs with new ones: $($fileIdsList.Count) total files"
-    } elseif ($ExistingFileIds.Count -gt 0) {
+    }
+    elseif ($ExistingFileIds.Count -gt 0) {
         # Keep existing file IDs if no new ones provided
         # Use ArrayList to ensure proper JSON serialization as array
         $fileIdsList = [System.Collections.ArrayList]::new()
@@ -361,17 +365,20 @@ function Set-CodeInterpreterConfiguration {
 
         if ($RequestBody.tool_resources -is [hashtable]) {
             $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
-        } else {
+        }
+        else {
             $RequestBody.tool_resources | Add-Member -MemberType NoteProperty -Name "code_interpreter" -Value $codeInterpreterConfig -Force
         }
         Write-Verbose "Preserved existing file IDs: $($ExistingFileIds.Count) files"
-    } else {
+    }
+    else {
         # No files, create empty file_ids array
         $codeInterpreterConfig = @{ file_ids = @() }
 
         if ($RequestBody.tool_resources -is [hashtable]) {
             $RequestBody.tool_resources.code_interpreter = $codeInterpreterConfig
-        } else {
+        }
+        else {
             $RequestBody.tool_resources | Add-Member -MemberType NoteProperty -Name "code_interpreter" -Value $codeInterpreterConfig -Force
         }
         Write-Verbose "Created empty file_ids array for code interpreter"
@@ -643,7 +650,7 @@ function New-MetroAIResource {
         Creates a new Metro AI agent or assistant resource with comprehensive tool support.
     .DESCRIPTION
         Creates an Azure AI agent or assistant with various tools including connected agents, code interpreter,
-        file search, Azure AI Search, custom functions, and OpenAPI integrations.
+        file search, Azure AI Search, custom functions, OpenAPI integrations, and MCP (Model Context Protocol) servers.
         Follows Azure best practices for parameter validation, error handling, and resource management.
         Note: Bing grounding must be added after creation using Set-MetroAIResource.
         Can create from JSON file, pipeline input object (for copying), or specify individual parameters.
@@ -711,8 +718,19 @@ function New-MetroAIResource {
         Connection ID for API authentication when using 'Connection' auth type.
     .PARAMETER OpenApiManagedAudience
         Target audience URI when using 'ManagedIdentity' auth type.
+    .PARAMETER EnableMcp
+        Enable Model Context Protocol (MCP) server integration.
+    .PARAMETER McpServerLabel
+        Unique label/name for the MCP server (max 256 characters).
+    .PARAMETER McpServerUrl
+        URL of the MCP server endpoint. Must start with http:// or https://.
+    .PARAMETER McpRequireApproval
+        Approval policy for MCP server actions: 'never', 'once', or 'always'. Default is 'never'.
+    .PARAMETER McpServersConfiguration
+        Array of MCP server configurations. Each must have 'server_label', 'server_url', and optionally 'require_approval' and 'allowed_tools' properties.
+        The 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server.
     .EXAMPLE
-        New-MetroAIResource -Model 'gpt-4' -Name 'MyAssistant' -Description 'General purpose assistant'
+        New-MetroAIResource -Model 'gpt-4.1' -Name 'MyAssistant' -Description 'General purpose assistant'
     .EXAMPLE
         New-MetroAIResource -InputFile './existing-assistant.json'
     .EXAMPLE
@@ -720,16 +738,27 @@ function New-MetroAIResource {
         $Agent = Get-MetroAIAgent -AssistantId 'asst-123'
         $Agent | New-MetroAIAgent -Name 'CopiedAgent'
     .EXAMPLE
-        New-MetroAIResource -Model 'gpt-4' -Name 'CodeHelper' -EnableCodeInterpreter -CodeInterpreterFileIds @('file-123')
+        New-MetroAIResource -Model 'gpt-4.1' -Name 'CodeHelper' -EnableCodeInterpreter -CodeInterpreterFileIds @('file-123')
+    .EXAMPLE
+        # Create assistant with MCP server integration
+        New-MetroAIResource -Model 'gpt-4.1' -Name 'MCPBot' -EnableMcp -McpServerLabel 'DatabaseServer' -McpServerUrl 'https://api.example.com/mcp' -McpRequireApproval 'once'
+    .EXAMPLE
+        # Create assistant with multiple MCP servers
+        $mcpServers = @(
+            @{ server_label = 'WeatherAPI'; server_url = 'https://weather.example.com/mcp'; require_approval = 'never' },
+            @{ server_label = 'DatabaseAPI'; server_url = 'https://db.example.com/mcp'; require_approval = 'once'; allowed_tools = @('query_db', 'update_record') }
+        )
+        New-MetroAIResource -Model 'gpt-4.1' -Name 'MultiMCPBot' -McpServersConfiguration $mcpServers
     .EXAMPLE
         # Create assistant, then add Bing grounding
-        $assistant = New-MetroAIResource -Model 'gpt-4' -Name 'SearchBot'
+        $assistant = New-MetroAIResource -Model 'gpt-4.1' -Name 'SearchBot'
         Set-MetroAIResource -AssistantId $assistant.id -EnableBingGrounding -BingConnectionId 'bing-search-connection'
     .EXAMPLE
-        # Multi-tool agent with various capabilities
-        New-MetroAIResource -Model 'gpt-4' -Name 'MultiToolAgent' `
+        # Multi-tool agent with various capabilities including MCP
+        New-MetroAIResource -Model 'gpt-4.1' -Name 'MultiToolAgent' `
             -EnableCodeInterpreter -CodeInterpreterFileIds @('file-123') `
-            -EnableAzureAiSearch -AzureAiSearchIndexes @(@{ index_connection_id='search-conn'; index_name='docs'; query_type='semantic'; top_k=5 })
+            -EnableAzureAiSearch -AzureAiSearchIndexes @(@{ index_connection_id='search-conn'; index_name='docs'; query_type='semantic'; top_k=5 }) `
+            -EnableMcp -McpServerLabel 'CustomAPI' -McpServerUrl 'https://api.example.com/mcp'
     .NOTES
         Requires Set-MetroAIContext to be called first. Follow Azure AI responsible AI guidelines.
         To add Bing grounding, use Set-MetroAIResource with -EnableBingGrounding after creation.
@@ -916,7 +945,43 @@ function New-MetroAIResource {
 
         [Parameter(ParameterSetName = 'Parameters')]
         [ValidatePattern('^https?://')]
-        [string]$OpenApiManagedAudience
+        [string]$OpenApiManagedAudience,
+
+        # MCP Server Parameters
+        [Parameter(ParameterSetName = 'Parameters')]
+        [switch]$EnableMcp,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateLength(1, 256)]
+        [string]$McpServerLabel,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidatePattern('^https?://')]
+        [ValidateNotNullOrEmpty()]
+        [string]$McpServerUrl,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateSet('never', 'once', 'always')]
+        [string]$McpRequireApproval = 'never',
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [ValidateScript({
+                foreach ($server in $_) {
+                    if (-not ($server.server_label -and $server.server_url)) {
+                        throw "Each McpServersConfiguration entry must include 'server_label' and 'server_url' properties"
+                    }
+                    if ($server.server_label.Length -gt 256) { throw "MCP server label exceeds 256 characters" }
+                    if ($server.server_url -notmatch '^https?://') { throw "MCP server URL must start with http:// or https://" }
+                    if ($server.require_approval -and $server.require_approval -notin @('never', 'once', 'always')) {
+                        throw "MCP server require_approval must be 'never', 'once', or 'always'"
+                    }
+                    if ($server.allowed_tools -and $server.allowed_tools -isnot [array]) {
+                        throw "MCP server allowed_tools must be an array of strings"
+                    }
+                }
+                return $true
+            })]
+        [object[]]$McpServersConfiguration
     )
 
     begin {
@@ -1006,6 +1071,10 @@ function New-MetroAIResource {
                     throw "Cannot use both -EnableConnectedAgent and -ConnectedAgentsDefinition simultaneously. Choose one approach."
                 }
 
+                if ($EnableMcp -and $McpServersConfiguration) {
+                    throw "Cannot use both -EnableMcp and -McpServersConfiguration simultaneously. Choose one approach."
+                }
+
                 if ($EnableConnectedAgent) {
                     $requiredParams = @('ConnectedAgentId', 'ConnectedAgentName', 'ConnectedAgentDescription')
                     foreach ($param in $requiredParams) {
@@ -1078,6 +1147,25 @@ function New-MetroAIResource {
 
                     if ($OpenApiAuthType -eq 'ManagedIdentity' -and -not $OpenApiManagedAudience) {
                         throw "OpenApiManagedAudience is required when OpenApiAuthType is 'ManagedIdentity'"
+                    }
+                }
+
+                if ($EnableMcp) {
+                    $requiredMcpParams = @('McpServerLabel', 'McpServerUrl')
+                    foreach ($param in $requiredMcpParams) {
+                        if (-not $PSBoundParameters[$param]) {
+                            throw "Parameter '$param' is required when using -EnableMcp"
+                        }
+                    }
+                }
+
+                if ($McpServersConfiguration) {
+                    Write-Verbose "Validating $($McpServersConfiguration.Count) MCP server configurations"
+                    foreach ($server in $McpServersConfiguration) {
+                        if (-not ($server.server_label -and $server.server_url)) {
+                            throw "Each MCP server configuration must include 'server_label' and 'server_url' properties"
+                        }
+                        Write-Verbose "MCP server configuration validated: $($server.server_label) at $($server.server_url)"
                     }
                 }
 
@@ -1206,6 +1294,40 @@ function New-MetroAIResource {
                     }
                 }
 
+                # MCP Server Tool
+                if ($EnableMcp) {
+                    Write-Verbose "Configuring MCP server tool: $McpServerLabel at $McpServerUrl"
+
+                    $tools.Add(@{
+                            type             = 'mcp'
+                            server_label     = $McpServerLabel
+                            server_url       = $McpServerUrl
+                            require_approval = $McpRequireApproval
+                        })
+                    Write-Verbose "Added MCP server tool: $McpServerLabel with approval policy: $McpRequireApproval"
+                }
+
+                if ($McpServersConfiguration) {
+                    Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
+                    foreach ($server in $McpServersConfiguration) {
+                        $mcpTool = @{
+                            type             = 'mcp'
+                            server_label     = $server.server_label
+                            server_url       = $server.server_url
+                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                        }
+                        
+                        # Add allowed_tools if specified
+                        if ($server.allowed_tools) {
+                            $mcpTool.allowed_tools = $server.allowed_tools
+                            Write-Verbose "Added allowed_tools for MCP server $($server.server_label): $($server.allowed_tools -join ', ')"
+                        }
+                        
+                        $tools.Add($mcpTool)
+                        Write-Verbose "Added MCP server tool: $($server.server_label) at $($server.server_url)"
+                    }
+                }
+
                 # Bing Grounding Tool - Connection-based only with correct payload structure
                 if ($EnableBingGrounding) {
                     Write-Verbose "Configuring Bing grounding tool with connection: $BingConnectionId"
@@ -1298,7 +1420,7 @@ function Set-MetroAIResource {
         Updates an existing Metro AI agent or assistant resource with comprehensive tool support.
     .DESCRIPTION
         Updates an Azure AI agent or assistant with various tools including connected agents, code interpreter,
-        file search, Azure AI Search, custom functions, OpenAPI integrations, and Bing grounding.
+        file search, Azure AI Search, custom functions, OpenAPI integrations, Bing grounding, and MCP (Model Context Protocol) servers.
         Can update from JSON file, specify individual parameters, or accept pipeline input from Get-MetroAIResource.
     .PARAMETER InputObject
         Pipeline input object from Get-MetroAIResource. When used, the object's properties are used for the update.
@@ -1332,10 +1454,38 @@ function Set-MetroAIResource {
         Switch to remove Bing grounding from existing tools.
     .PARAMETER ClearAllTools
         Switch to remove all existing tools before applying new configuration.
+    .PARAMETER EnableMcp
+        Enable Model Context Protocol (MCP) server integration.
+    .PARAMETER McpServerLabel
+        Unique label/name for the MCP server (max 256 characters).
+    .PARAMETER McpServerUrl
+        URL of the MCP server endpoint. Must start with http:// or https://.
+    .PARAMETER McpRequireApproval
+        Approval policy for MCP server actions: 'never', 'once', or 'always'. Default is 'never'.
+    .PARAMETER AddMcp
+        Switch to add MCP server to existing tools without replacing them.
+    .PARAMETER RemoveMcp
+        Switch to remove all MCP servers from existing tools.
+    .PARAMETER McpServersConfiguration
+        Array of MCP server configurations. Each must have 'server_label', 'server_url', and optionally 'require_approval' and 'allowed_tools' properties.
+        The 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server.
     .EXAMPLE
         Set-MetroAIResource -AssistantId 'asst-123' -InputFile './updated-assistant.json'
     .EXAMPLE
         Set-MetroAIResource -AssistantId 'asst-123' -EnableBingGrounding -BingConnectionId 'bing-conn-1'
+    .EXAMPLE
+        # Add MCP server to existing assistant
+        Set-MetroAIResource -AssistantId 'asst-123' -AddMcp -McpServerLabel 'WeatherAPI' -McpServerUrl 'https://weather.example.com/mcp'
+    .EXAMPLE
+        # Replace all tools with MCP server only
+        Set-MetroAIResource -AssistantId 'asst-123' -ClearAllTools -EnableMcp -McpServerLabel 'DatabaseAPI' -McpServerUrl 'https://db.example.com/mcp' -McpRequireApproval 'once'
+    .EXAMPLE
+        # Add multiple MCP servers
+        $mcpServers = @(
+            @{ server_label = 'API1'; server_url = 'https://api1.example.com/mcp'; require_approval = 'never' },
+            @{ server_label = 'API2'; server_url = 'https://api2.example.com/mcp'; require_approval = 'always' }
+        )
+        Set-MetroAIResource -AssistantId 'asst-123' -McpServersConfiguration $mcpServers
     .EXAMPLE
         $Agent = Get-MetroAIAgent -AssistantId 'asst-123'
         $Agent.Description = 'Updated description'
@@ -1442,7 +1592,56 @@ function Set-MetroAIResource {
 
         [Parameter(ParameterSetName = 'Parameters')]
         [Parameter(ParameterSetName = 'InputObject')]
-        [switch]$ClearAllTools
+        [switch]$ClearAllTools,
+
+        # MCP Server Parameters
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [switch]$EnableMcp,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [ValidateLength(1, 256)]
+        [string]$McpServerLabel,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [ValidatePattern('^https?://')]
+        [ValidateNotNullOrEmpty()]
+        [string]$McpServerUrl,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [ValidateSet('never', 'once', 'always')]
+        [string]$McpRequireApproval = 'never',
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [switch]$AddMcp,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [switch]$RemoveMcp,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [ValidateScript({
+                foreach ($server in $_) {
+                    if (-not ($server.server_label -and $server.server_url)) {
+                        throw "Each McpServersConfiguration entry must include 'server_label' and 'server_url' properties"
+                    }
+                    if ($server.server_label.Length -gt 256) { throw "MCP server label exceeds 256 characters" }
+                    if ($server.server_url -notmatch '^https?://') { throw "MCP server URL must start with http:// or https://" }
+                    if ($server.require_approval -and $server.require_approval -notin @('never', 'once', 'always')) {
+                        throw "MCP server require_approval must be 'never', 'once', or 'always'"
+                    }
+                    if ($server.allowed_tools -and $server.allowed_tools -isnot [array]) {
+                        throw "MCP server allowed_tools must be an array of strings"
+                    }
+                }
+                return $true
+            })]
+        [object[]]$McpServersConfiguration
     )
 
     begin {
@@ -1462,9 +1661,25 @@ function Set-MetroAIResource {
                 throw "Cannot use multiple Bing grounding options simultaneously. Choose one: -EnableBingGrounding, -AddBingGrounding, or -RemoveBingGrounding."
             }
 
+            # Validate mutually exclusive MCP options
+            $mcpOptions = @($EnableMcp, $AddMcp, $RemoveMcp) | Where-Object { $_ }
+            if ($mcpOptions.Count -gt 1) {
+                throw "Cannot use multiple MCP options simultaneously. Choose one: -EnableMcp, -AddMcp, or -RemoveMcp."
+            }
+
+            # Validate MCP and McpServersConfiguration are not used together
+            if (($EnableMcp -or $AddMcp) -and $McpServersConfiguration) {
+                throw "Cannot use both individual MCP parameters (-EnableMcp/-AddMcp) and -McpServersConfiguration simultaneously. Choose one approach."
+            }
+
             # Validate Bing connection ID is provided when needed
             if (($EnableBingGrounding -or $AddBingGrounding) -and -not $BingConnectionId) {
                 throw "BingConnectionId is required when using -EnableBingGrounding or -AddBingGrounding."
+            }
+
+            # Validate MCP parameters are provided when needed
+            if (($EnableMcp -or $AddMcp) -and (-not $McpServerLabel -or -not $McpServerUrl)) {
+                throw "McpServerLabel and McpServerUrl are required when using -EnableMcp or -AddMcp."
             }
 
             if ($PSCmdlet.ParameterSetName -eq 'Json') {
@@ -1560,6 +1775,11 @@ function Set-MetroAIResource {
                             Write-Verbose "Removing existing Bing grounding tool for reconfiguration"
                             continue
                         }
+                        if ($tool.type -eq 'mcp' -and ($EnableMcp -or $AddMcp -or $RemoveMcp)) {
+                            # Skip existing MCP tools when we're modifying them
+                            Write-Verbose "Removing existing MCP tool for reconfiguration"
+                            continue
+                        }
                         $newTools.Add($tool)
                     }
 
@@ -1592,6 +1812,42 @@ function Set-MetroAIResource {
                     Write-Verbose "Added Bing grounding tool"
                 }
 
+                # Add MCP server if requested
+                if ($EnableMcp -or $AddMcp) {
+                    Write-Verbose "Adding MCP server tool: $McpServerLabel at $McpServerUrl"
+
+                    $mcpTool = @{
+                        type             = 'mcp'
+                        server_label     = $McpServerLabel
+                        server_url       = $McpServerUrl
+                        require_approval = $McpRequireApproval
+                    }
+                    $newTools.Add($mcpTool)
+                    Write-Verbose "Added MCP server tool: $McpServerLabel"
+                }
+
+                # Add multiple MCP servers if configuration provided
+                if ($McpServersConfiguration) {
+                    Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
+                    foreach ($server in $McpServersConfiguration) {
+                        $mcpTool = @{
+                            type             = 'mcp'
+                            server_label     = $server.server_label
+                            server_url       = $server.server_url
+                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                        }
+                        
+                        # Add allowed_tools if specified
+                        if ($server.allowed_tools) {
+                            $mcpTool.allowed_tools = $server.allowed_tools
+                            Write-Verbose "Added allowed_tools for MCP server $($server.server_label): $($server.allowed_tools -join ', ')"
+                        }
+                        
+                        $newTools.Add($mcpTool)
+                        Write-Verbose "Added MCP server tool: $($server.server_label)"
+                    }
+                }
+
                 # Set tools in request body
                 $requestBody.tools = $newTools.ToArray()
 
@@ -1605,6 +1861,9 @@ function Set-MetroAIResource {
                 if ($CodeInterpreterFileIds) { $changes += "update code interpreter files" }
                 if ($EnableBingGrounding -or $AddBingGrounding) { $changes += "add Bing grounding" }
                 if ($RemoveBingGrounding) { $changes += "remove Bing grounding" }
+                if ($EnableMcp -or $AddMcp) { $changes += "add MCP server" }
+                if ($RemoveMcp) { $changes += "remove MCP servers" }
+                if ($McpServersConfiguration) { $changes += "add multiple MCP servers" }
                 if ($ClearAllTools) { $changes += "clear all tools" }
 
                 $confirmMessage = "Update assistant '$targetAssistantId' from pipeline input"
@@ -1658,6 +1917,11 @@ function Set-MetroAIResource {
                             Write-Verbose "Removing existing Bing grounding tool for reconfiguration"
                             continue
                         }
+                        if ($tool.type -eq 'mcp' -and ($EnableMcp -or $AddMcp -or $RemoveMcp)) {
+                            # Skip existing MCP tools when we're modifying them
+                            Write-Verbose "Removing existing MCP tool for reconfiguration"
+                            continue
+                        }
                         $newTools.Add($tool)
                     }
 
@@ -1688,6 +1952,42 @@ function Set-MetroAIResource {
                     }
                     $newTools.Add($bingTool)
                     Write-Verbose "Added Bing grounding tool"
+                }
+
+                # Add MCP server if requested
+                if ($EnableMcp -or $AddMcp) {
+                    Write-Verbose "Adding MCP server tool: $McpServerLabel at $McpServerUrl"
+
+                    $mcpTool = @{
+                        type             = 'mcp'
+                        server_label     = $McpServerLabel
+                        server_url       = $McpServerUrl
+                        require_approval = $McpRequireApproval
+                    }
+                    $newTools.Add($mcpTool)
+                    Write-Verbose "Added MCP server tool: $McpServerLabel"
+                }
+
+                # Add multiple MCP servers if configuration provided
+                if ($McpServersConfiguration) {
+                    Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
+                    foreach ($server in $McpServersConfiguration) {
+                        $mcpTool = @{
+                            type             = 'mcp'
+                            server_label     = $server.server_label
+                            server_url       = $server.server_url
+                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                        }
+                        
+                        # Add allowed_tools if specified
+                        if ($server.allowed_tools) {
+                            $mcpTool.allowed_tools = $server.allowed_tools
+                            Write-Verbose "Added allowed_tools for MCP server $($server.server_label): $($server.allowed_tools -join ', ')"
+                        }
+                        
+                        $newTools.Add($mcpTool)
+                        Write-Verbose "Added MCP server tool: $($server.server_label)"
+                    }
                 }
 
                 # Set tools in request body
@@ -1725,6 +2025,9 @@ function Set-MetroAIResource {
                 if ($CodeInterpreterFileIds) { $changes += "update code interpreter files" }
                 if ($EnableBingGrounding -or $AddBingGrounding) { $changes += "add Bing grounding" }
                 if ($RemoveBingGrounding) { $changes += "remove Bing grounding" }
+                if ($EnableMcp -or $AddMcp) { $changes += "add MCP server" }
+                if ($RemoveMcp) { $changes += "remove MCP servers" }
+                if ($McpServersConfiguration) { $changes += "add multiple MCP servers" }
                 if ($ClearAllTools) { $changes += "clear all tools" }
 
                 if ($changes.Count -gt 0) {
