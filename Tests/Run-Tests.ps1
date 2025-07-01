@@ -67,7 +67,8 @@ switch ($OutputFormat) {
         $PesterConfiguration.TestResult.OutputFormat = "NUnitXml"
         if ($OutputPath) {
             $PesterConfiguration.TestResult.OutputPath = $OutputPath
-        } else {
+        }
+        else {
             $PesterConfiguration.TestResult.OutputPath = Join-Path $TestDirectory "TestResults.xml"
         }
     }
@@ -76,7 +77,8 @@ switch ($OutputFormat) {
         $PesterConfiguration.TestResult.OutputFormat = "JUnitXml"
         if ($OutputPath) {
             $PesterConfiguration.TestResult.OutputPath = $OutputPath
-        } else {
+        }
+        else {
             $PesterConfiguration.TestResult.OutputPath = Join-Path $TestDirectory "TestResults.xml"
         }
     }
@@ -134,10 +136,12 @@ if ($TestType -in @("SmokeTest", "Integration", "All")) {
         if (-not $context) {
             Write-Warning "Metro.AI context is not configured. Integration and Smoke tests may fail."
             Write-Host "To configure context, run: Set-MetroAIContext -Endpoint 'your-endpoint' -ApiType 'Agent|Assistant'" -ForegroundColor Cyan
-        } else {
+        }
+        else {
             Write-Host "Metro.AI context detected: $($context.Endpoint)" -ForegroundColor Green
         }
-    } catch {
+    }
+    catch {
         Write-Warning "Could not verify Metro.AI context: $_"
     }
 }
@@ -168,17 +172,20 @@ try {
             Write-Host ""
             Write-Host "Some tests failed. Review the output above for details." -ForegroundColor Red
             exit 1
-        } else {
+        }
+        else {
             Write-Host ""
             Write-Host "All tests passed successfully!" -ForegroundColor Green
             exit 0
         }
-    } else {
+    }
+    else {
         Write-Host "Test execution completed but no results returned." -ForegroundColor Yellow
         exit 0
     }
     
-} catch {
+}
+catch {
     Write-Error "Test execution failed: $_"
     exit 1
 }

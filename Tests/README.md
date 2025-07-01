@@ -71,79 +71,7 @@ Set-MetroAIContext -Endpoint "https://your-endpoint.com" -ApiType "Agent"  # or 
 ./Tests/Run-Tests.ps1 -TestType All -OutputFormat NUnitXml -OutputPath "./TestResults.xml"
 ```
 
-### Using Pester Directly
-
-```powershell
-# Run unit tests only
-Invoke-Pester -Path "./Tests/Metro.AI.UnitTests.ps1"
-
-# Run smoke tests only
-Invoke-Pester -Path "./Tests/Metro.AI.SmokeTests.ps1"
-
-# Run tests by tag
-Invoke-Pester -Tag "Unit"
-Invoke-Pester -Tag "SmokeTest"
-```
-
-## Test Configuration
-
-The `TestConfig.ps1` file contains:
-- Test data definitions
-- Cleanup utilities
-- Configuration settings
-- Helper functions for test resource tracking
-
-## Expected Test Results
-
-### Unit Tests
-- **20 functions** should be exported
-- **8 aliases** should be available
-- All functions should have proper help documentation
-- Parameter validation should work correctly
-
-### Smoke Tests
-- Context management should work
-- Resource creation/modification/deletion should succeed
-- Thread operations should function
-- File operations should work (if supported)
-- API calls should execute without errors
-
-## Test Resource Cleanup
-
-Smoke tests automatically clean up resources they create:
-- Created resources (agents/assistants)
-- Created threads
-- Uploaded files
-
-If tests are interrupted, you may need to manually clean up test resources.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"Metro.AI context not set" errors**
-   - Solution: Run `Set-MetroAIContext` before running smoke tests
-
-2. **Module import failures**
-   - Solution: Ensure the module is built and available at `../src/Metro.AI.psd1`
-
-3. **API permission errors**
-   - Solution: Verify your Metro.AI endpoint credentials and permissions
-
-4. **Test resource cleanup failures**
-   - Solution: Manually remove test resources through the Metro.AI interface
-
-### Debugging Tests
-
-Enable verbose output:
-```powershell
-./Run-Tests.ps1 -TestType SmokeTest -Show All
-```
-
-Run individual test contexts:
-```powershell
-Invoke-Pester -Path "./Tests/Metro.AI.SmokeTests.ps1" -Context "Context Management Functions"
-```
+#
 
 ## Contributing to Tests
 
@@ -174,25 +102,3 @@ The test runner script supports XML output formats suitable for CI/CD pipelines:
 # For GitHub Actions
 ./Run-Tests.ps1 -OutputFormat JUnitXml -OutputPath "test-results.xml"
 ```
-
-## Test Coverage
-
-Current test coverage includes:
-- ✅ All 20 public functions
-- ✅ All 8 aliases
-- ✅ Context management
-- ✅ Resource operations
-- ✅ Thread operations
-- ✅ File operations
-- ✅ Error handling
-- ✅ Parameter validation
-- ✅ Module structure
-
-## Performance Considerations
-
-- Unit tests run in < 30 seconds
-- Smoke tests may take 2-5 minutes depending on API response times
-- Tests include timeouts to prevent hanging
-- Resource cleanup is performed automatically
-
-For questions or issues with the test suite, please refer to the main project documentation or open an issue.

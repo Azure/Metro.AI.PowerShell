@@ -3,7 +3,7 @@
     RootModule        = 'Metro.AI.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '0.9.0'
+    ModuleVersion     = '1.0.0'
 
     # GUID used to uniquely identify this module.
     GUID              = '09e3e9c9-b7b7-4449-a5e1-a026bbc7c8fb'
@@ -21,7 +21,12 @@
     PowerShellVersion = '7.0'
 
     # Modules that must be imported into the global environment prior to importing this module.
-    RequiredModules   = @('Az.Accounts')
+    RequiredModules   = @(
+        @{
+            ModuleName    = 'Az.Accounts'
+            ModuleVersion = '5.1.0'
+        }
+    )
 
     # Functions to export from this module.
     FunctionsToExport = @(
