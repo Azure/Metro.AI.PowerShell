@@ -1,0 +1,8 @@
+This is a sample test file for Metro.AI PowerShell module testing.
+
+It contains some basic text content that can be uploaded to test file operations.
+
+Test data:
+- Created: $(Get-Date)
+- Purpose: Testing file upload and management functions
+- Content: Plain text sample data
