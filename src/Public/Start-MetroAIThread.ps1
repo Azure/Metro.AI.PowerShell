@@ -1,9 +1,9 @@
 function Start-MetroAIThread {
     <#
     .SYNOPSIS
-        Starta a thread.
+        Start a thread.
     .DESCRIPTION
-        Starts a run on the specified thread and waits for completion unless Async is specified.
+        Starts a thread on the specified thread and waits for completion unless Async is specified.
     .PARAMETER AssistantId
         The agent or assistant ID.
     .PARAMETER ThreadID
