@@ -1,7 +1,7 @@
 function Start-MetroAIThreadRun {
     <#
     .SYNOPSIS
-        Start a thread.
+        Initiates a run on a thread.
     .DESCRIPTION
         Starts a run on the specified thread and waits for completion unless Async is specified.
     .PARAMETER AssistantId
