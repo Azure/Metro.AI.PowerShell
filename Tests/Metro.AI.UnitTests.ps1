@@ -30,7 +30,7 @@ Describe "Metro.AI PowerShell Module - Unit Tests" -Tags @("Unit") {
                 'Add-MetroAIAgentOpenAPIDefinition',
                 'Clear-MetroAIContextCache',
                 'Get-MetroAIContext',
-                'Get-MetroAIMessages',
+                'Get-MetroAIMessage',
                 'Get-MetroAIOutputFiles',
                 'Get-MetroAIResource',
                 'Get-MetroAIThread',
@@ -45,7 +45,7 @@ Describe "Metro.AI PowerShell Module - Unit Tests" -Tags @("Unit") {
                 'Remove-MetroAIResource',
                 'Set-MetroAIContext',
                 'Set-MetroAIResource',
-                'Start-MetroAIThreadRun',
+                'Start-MetroAIThread',
                 'Start-MetroAIThreadWithMessages'
             )
 

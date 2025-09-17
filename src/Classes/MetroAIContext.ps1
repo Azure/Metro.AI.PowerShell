@@ -3,7 +3,7 @@ class MetroAIContext {
     [ValidateSet('Agent', 'Assistant')]
     [string]$ApiType
 
-    [bool]$UseNewApi
+    [bool]$CurrentApi
     [string]$ApiVersion
 
     MetroAIContext([string]$endpoint, [string]$apiType, [string]$apiVersion = "") {
@@ -12,9 +12,9 @@ class MetroAIContext {
         $this.ApiType = $apiType
         $this.ApiVersion = $apiVersion
 
-        # auto-detect new vs old based on hostname
+        # auto-detect current vs previous endpoint based on hostname
         # new AI endpoints live under *.ai.azure.com
-        $this.UseNewApi = $this.Endpoint -match '\.ai\.azure\.com'
+        $this.CurrentApi = $this.Endpoint -match '\.ai\.azure\.com'
     }
 
     MetroAIContext([string]$connectionString, [string]$apiType, [switch]$fromConnectionString) {
@@ -32,15 +32,15 @@ class MetroAIContext {
         [string]$Path = "",
         [switch]$UseOpenPrefix
     ) {
-        if ($this.UseNewApi) {
-            # new surface: endpoint already includes /api/projects/{…}
+        if ($this.CurrentApi) {
+            # endpoint includes /api/projects/{…}
             $base = "$($this.Endpoint)/$Service"
             if ($Path) { $base += "/$Path" }
             $ver = if ($this.ApiVersion) { $this.ApiVersion } else { '2025-05-15-preview' }
             return "$base`?api-version=$ver"
         }
 
-        # old-style behavior
+        # Previous behavior
         $prefix = ($this.ApiType -eq 'Assistant' -and $UseOpenPrefix) ? "openai/" : ""
         $baseUri = "$($this.Endpoint)/$prefix$Service"
         if ($Path) { $baseUri += "/$Path" }

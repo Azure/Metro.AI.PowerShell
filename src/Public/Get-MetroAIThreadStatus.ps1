@@ -1,9 +1,9 @@
 function Get-MetroAIThreadStatus {
     <#
     .SYNOPSIS
-        Retrieves the status of a thread run.
+        Retrieves the status of a thread.
     .DESCRIPTION
-        Returns status details of a run.
+        Returns status details of a thread.
     .PARAMETER ThreadID
         The thread ID.
     .PARAMETER RunID

@@ -65,7 +65,7 @@ Get-MetroAIContext
 
 #### 🆕 Creating a New Agent
 
-Define your agent's instructions and create a new Metro.AI agent using GPT-4.1:
+Define your agent's instructions and create a new Metro.AI agent using GPT-4o:
 
 ```powershell
 $instructions = @"
@@ -75,7 +75,7 @@ You should not provide personal opinions or make assumptions about the user.
 Always ask clarifying questions if the user's request is unclear.
 "@
 
-New-MetroAIAgent -ResourceName "myAgent" -Model "gpt-4.1" -Instructions $instructions
+New-MetroAIAgent -ResourceName "myAgent" -Model "gpt-4o" -Instructions $instructions
 ```
 
 #### 📋 Working with Existing Agents
@@ -93,7 +93,7 @@ $copiedAgent = $originalAgent | New-MetroAIAgent -Name "CopiedAgent"
 
 # Copy with modifications - override specific properties while copying
 $enhancedAgent = $originalAgent | New-MetroAIAgent -Name "EnhancedAgent" `
-    -Model "gpt-4.1" `
+    -Model "gpt-4o" `
     -Description "Enhanced version of the original agent"
 
 Write-Output "Created new agent: $($enhancedAgent.name) with ID: $($enhancedAgent.id)"
@@ -113,8 +113,8 @@ automation, and Azure management tasks. Always provide working examples
 and explain best practices.
 "@
 
-# Update the agent with the modified properties
-$updatedAgent = $agent | Set-MetroAIAgent
+# Update the agent with the modified properties and enable Code Interpreter
+$updatedAgent = $agent | Set-MetroAIAgent -EnableCodeInterpreter -CodeInterpreterFileIds @()
 Write-Output "Updated agent: $($updatedAgent.name)"
 
 # You can also override specific properties during the update
@@ -159,7 +159,7 @@ $message = Invoke-MetroAIMessage -ThreadID $thread.id -Message "Hello, can you g
 Execute the thread with your agent:
 
 ```powershell
-$run = Start-MetroAIThreadRun -ThreadID $thread.id -AssistantId $yourAgent.id
+$run = Start-MetroAIThread -ThreadID $thread.id -AssistantId $agent.id
 ```
 
 #### 📁 Working with Generated Files
@@ -171,7 +171,7 @@ After execution, the agent can generate downloadable files:
 Get-MetroAIOutputFiles
 
 # Download the file locally
-Get-MetroAIOutputFiles -FileId assistant-TqVaZqCx3ZcP6aR4eRay98 -LocalFilePath ConnectToAzure.ps1
+Get-MetroAIOutputFiles -FileId $run.annotations.file_path.file_id -LocalFilePath ConnectToAzure.ps1
 ```
 
 You can now use the downloaded `ConnectToAzure.ps1` script to establish a connection to Azure.
@@ -209,13 +209,13 @@ foreach ($agent in $specializedAgents.GetEnumerator()) {
    $agentDetails = $specializedAgents[$agent.Key]
    Write-Output "Creating agent: $($agent.Key)"
 
-   $createdAgents += New-MetroAIAgent -Model 'gpt-4.1' -Name $agent.Key `
+   $createdAgents += New-MetroAIAgent -Model 'gpt-4o' -Name $agent.Key `
       -Instructions $agentDetails.Instructions `
       -Description $agentDetails.Description -Verbose
 }
 
 # Create proxy agent that orchestrates the specialized agents
-$proxyAgent = New-MetroAIAgent -Model 'gpt-4.1' -Name 'ProxyAgent' `
+$proxyAgent = New-MetroAIAgent -Model 'gpt-4o' -Name 'ProxyAgent' `
    -ConnectedAgentsDefinition ($createdAgents | Select-Object id, name, description) `
    -Description 'Proxy agent that connects to specialized agents for market analysis, trading, research, and compliance.' `
    -Instructions 'This agent will connect to specialized agents to perform tasks related to market analysis, trading, research, and compliance. Coordinate with the appropriate specialized agents based on the user request and ensure all compliance requirements are met.' `
@@ -241,12 +241,12 @@ and ensure everything complies with current trading regulations.
 "@
 
 # Execute with the proxy agent
-$proxyRun = Start-MetroAIThreadRun -ThreadID $proxyThread.id -AssistantId $proxyAgent.id
+$proxyRun = Start-MetroAIThread -ThreadID $proxyThread.id -AssistantId $proxyAgent.id -Async
 
 # Monitor the run status
 do {
     Start-Sleep -Seconds 2
-    $runStatus = Get-MetroAIThreadRun -ThreadID $proxyThread.id -RunId $proxyRun.id
+    $runStatus = Get-MetroAIThreadStatus -ThreadID $proxyThread.id -RunId $proxyRun.id
     Write-Output "Run Status: $($runStatus.status)"
 } while ($runStatus.status -in @("queued", "in_progress"))
 
@@ -262,7 +262,7 @@ You can create an agent that uses Bing search to provide real-time web informati
 
 ```powershell
 # First, create the basic agent
-$researchAgent = New-MetroAIAgent -Model 'gpt-4.1' -Name 'WebResearchAgent' `
+$researchAgent = New-MetroAIAgent -Model 'gpt-4o' -Name 'WebResearchAgent' `
    -Description 'Agent that can search the web for current information and provide research insights.' `
    -Instructions @"
 You are a research assistant with access to current web information through Bing search.
@@ -290,7 +290,7 @@ You can create agents that connect to MCP servers to extend their capabilities b
 
 ```powershell
 # Create an agent with a single MCP server
-New-MetroAIAgent -Model 'gpt-4.1' -Name 'Microsoft Learn Agent' `
+New-MetroAIAgent -Model 'gpt-4o' -Name 'Microsoft Learn Agent' `
     -EnableMcp -McpServerLabel 'Microsoft_Learn_MCP' `
     -McpServerUrl 'https://learn.microsoft.com/api/mcp' `
     -Description 'Agent with access to Microsoft Learn documentation through MCP server' `
@@ -329,7 +329,7 @@ $mcpServers = @(
 )
 
 # Create agent with multiple MCP servers
-New-MetroAIAgent -Model 'gpt-4.1' -Name 'MultiServiceAgent' `
+New-MetroAIAgent -Model 'gpt-4o' -Name 'MultiServiceAgent' `
     -McpServersConfiguration $mcpServers `
     -Description 'Agent with access to weather, database, and document services' `
     -Instructions @"
@@ -477,12 +477,12 @@ Write-Output "🎉 Agent replication completed across all regions"
 Set-MetroAIContext -Endpoint "https://your-ai-endpoint.ai.azure.com/api/projects/your-project" -ApiType Agent
 
 # 2. Create a simple agent
-$agent = New-MetroAIAgent -Model 'gpt-4.1' -Name 'Helper' -Instructions 'You are a helpful assistant.'
+$agent = New-MetroAIAgent -Model 'gpt-4o' -Name 'Helper' -Instructions 'You are a helpful assistant.'
 
 # 3. Start a conversation
 $thread = New-MetroAIThread
 $message = Invoke-MetroAIMessage -ThreadID $thread.id -Message "Hello, how can you help me today?"
-$run = Start-MetroAIThreadRun -ThreadID $thread.id -AssistantId $agent.id
+$run = Start-MetroAIThread -ThreadID $thread.id -AssistantId $agent.id
 
 # 4. Get the response
 Get-MetroAIMessage -ThreadID $thread.id
@@ -495,7 +495,7 @@ Get-MetroAIMessage -ThreadID $thread.id
 
 ```powershell
 # Create an agent with code interpreter capabilities
-$codeAgent = New-MetroAIAgent -Model 'gpt-4.1' -Name 'CodeAnalyzer' `
+$codeAgent = New-MetroAIAgent -Model 'gpt-4o' -Name 'CodeAnalyzer' `
     -EnableCodeInterpreter `
     -Instructions 'You can analyze and execute code. Help users with programming tasks.'
 
@@ -535,7 +535,7 @@ $comprehensiveMcpServers = @(
 )
 
 # Create comprehensive business agent
-$businessAgent = New-MetroAIAgent -Model 'gpt-4.1' -Name 'BusinessIntelligenceAgent' `
+$businessAgent = New-MetroAIAgent -Model 'gpt-4o' -Name 'BusinessIntelligenceAgent' `
     -McpServersConfiguration $comprehensiveMcpServers `
     -Description 'Comprehensive business intelligence agent with access to weather, database, and document services' `
     -Instructions @"
@@ -560,7 +560,7 @@ Please provide a business summary including:
 3. A summary of the latest quarterly reports
 "@
 
-$businessRun = Start-MetroAIThreadRun -ThreadID $businessThread.id -AssistantId $businessAgent.id
+$businessRun = Start-MetroAIThread -ThreadID $businessThread.id -AssistantId $businessAgent.id
 ```
 
 </details>

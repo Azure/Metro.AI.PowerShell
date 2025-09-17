@@ -2,7 +2,7 @@ function Get-MetroAuthHeader {
     <#
     .SYNOPSIS
         Returns a header hashtable with an authorization token for the specified API type,
-        automatically choosing the right Azure resource URL for old vs new endpoints.
+        automatically choosing the right Azure resource URL for endpoints.
     #>
     param (
         [Parameter(Mandatory = $true)]
@@ -16,16 +16,16 @@ function Get-MetroAuthHeader {
         }
 
         # decide which resource to ask a token for
-        if ($script:MetroContext.UseNewApi) {
+        if ($script:MetroContext.CurrentApi) {
             # unified new AI surface
             $resourceUrl = "https://ai.azure.com/"
         }
         elseif ($ApiType -eq 'Agent') {
-            # old Agent endpoint
+            # previous Agent endpoint
             $resourceUrl = "https://ml.azure.com/"
         }
         else {
-            # old Assistant endpoint
+            # previous Assistant endpoint
             $resourceUrl = "https://cognitiveservices.azure.com/"
         }
 

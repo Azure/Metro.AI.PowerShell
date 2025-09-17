@@ -1,4 +1,4 @@
-function Get-MetroAIMessages {
+function Get-MetroAIMessage {
     <#
     .SYNOPSIS
         Retrieves messages from a thread.
@@ -15,6 +15,6 @@ function Get-MetroAIMessages {
         Invoke-MetroAIApiCall -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $ThreadID) -Method Get | Select-Object -ExpandProperty data
     }
     catch {
-        Write-Error "Get-MetroAIMessages error: $_"
+        Write-Error "Get-MetroAIMessage error: $_"
     }
 }

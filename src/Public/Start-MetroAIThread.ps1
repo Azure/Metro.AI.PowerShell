@@ -1,7 +1,7 @@
-function Start-MetroAIThreadRun {
+function Start-MetroAIThread {
     <#
     .SYNOPSIS
-        Initiates a run on a thread.
+        Starta a thread.
     .DESCRIPTION
         Starts a run on the specified thread and waits for completion unless Async is specified.
     .PARAMETER AssistantId
@@ -39,6 +39,6 @@ function Start-MetroAIThreadRun {
         return $runResponse
     }
     catch {
-        Write-Error "Start-MetroAIThreadRun error: $_"
+        Write-Error "Start-MetroAIThread error: $_"
     }
 }
