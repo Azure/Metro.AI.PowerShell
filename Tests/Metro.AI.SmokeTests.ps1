@@ -251,7 +251,7 @@ Describe "Metro.AI PowerShell Module - Public Functions Smoke Tests" -Tags @("Sm
 
             try {
                 $threadId = $script:CreatedThreads[0]
-                $run = Start-MetroAIThread -ThreadId $threadId -AssistantId $script:TestAgentId -Async
+                $run = Start-MetroAIThreadRun -ThreadId $threadId -AssistantId $script:TestAgentId -Async
                 $run | Should -Not -BeNullOrEmpty
                 
                 # For async runs, we should get a run object with an ID
@@ -731,13 +731,7 @@ Always cite your sources and indicate when information comes from web searches.
             }
         }
 
-        It "Start-MetroAIThread should start a thread run or handle constraints" {
-            if (-not $script:HasValidContext) {
-                Set-ItResult -Skipped -Because $script:SkipMessage
-                return
-            }
-
-        It "Start-MetroAIThread should start a thread run or handle constraints" {
+        It "Start-MetroAIThreadRun should start a thread run or handle constraints" {
             if (-not $script:HasValidContext) {
                 Set-ItResult -Skipped -Because $script:SkipMessage
                 return
@@ -755,7 +749,7 @@ Always cite your sources and indicate when information comes from web searches.
 
             $threadId = $script:CreatedThreads[0]
             try {
-                $run = Start-MetroAIThread -ThreadId $threadId -AssistantId $script:TestAgentId
+                $run = Start-MetroAIThreadRun -ThreadId $threadId -AssistantId $script:TestAgentId
                 $run | Should -Not -BeNullOrEmpty
                 $run.id | Should -Not -BeNullOrEmpty
                 $run.thread_id | Should -Be $threadId
@@ -1104,7 +1098,7 @@ Always cite your sources and indicate when information comes from web searches.
                 $message | Should -Not -BeNullOrEmpty
 
                 # Start run
-                $run = Start-MetroAIThread -ThreadId $thread.id -AssistantId $script:TestAgentId -Async
+                $run = Start-MetroAIThreadRun -ThreadId $thread.id -AssistantId $script:TestAgentId -Async
                 $run | Should -Not -BeNullOrEmpty
                 $run.id | Should -Not -BeNullOrEmpty
 
@@ -1212,12 +1206,12 @@ This is a test message for complex workflow validation.
 
                 $complexMessage | Should -Not -BeNullOrEmpty
 
-                $complexRun = Start-MetroAIThread -ThreadId $complexThread.id -AssistantId $script:TestAgentId -Async
+                $complexRun = Start-MetroAIThreadRun -ThreadId $complexThread.id -AssistantId $script:TestAgentId -Async
                 $complexRun | Should -Not -BeNullOrEmpty
                 $complexRun.id | Should -Not -BeNullOrEmpty
 
                 # Check thread status (might take time to complete)
-                $threadStatus = Get-MetroAIThreadStatus -ThreadId $complexThread.id -RunId $complexRun.id
+                $threadStatus = Get-MetroAIThreadRunStatus -ThreadId $complexThread.id -RunId $complexRun.id
                 $threadStatus | Should -Not -BeNullOrEmpty
                 
                 Write-Host "✅ Successfully completed complex thread workflow" -ForegroundColor Green

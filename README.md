@@ -159,7 +159,7 @@ $message = Invoke-MetroAIMessage -ThreadID $thread.id -Message "Hello, can you g
 Execute the thread with your agent:
 
 ```powershell
-$run = Start-MetroAIThread -ThreadID $thread.id -AssistantId $agent.id
+$run = Start-MetroAIThreadRun -ThreadID $thread.id -AssistantId $agent.id
 ```
 
 #### 📁 Working with Generated Files
@@ -241,12 +241,12 @@ and ensure everything complies with current trading regulations.
 "@
 
 # Execute with the proxy agent
-$proxyRun = Start-MetroAIThread -ThreadID $proxyThread.id -AssistantId $proxyAgent.id -Async
+$proxyRun = Start-MetroAIThreadRun -ThreadID $proxyThread.id -AssistantId $proxyAgent.id -Async
 
 # Monitor the run status
 do {
     Start-Sleep -Seconds 2
-    $runStatus = Get-MetroAIThreadStatus -ThreadID $proxyThread.id -RunId $proxyRun.id
+    $runStatus = Get-MetroAIThreadRunStatus -ThreadID $proxyThread.id -RunId $proxyRun.id
     Write-Output "Run Status: $($runStatus.status)"
 } while ($runStatus.status -in @("queued", "in_progress"))
 
@@ -482,7 +482,7 @@ $agent = New-MetroAIAgent -Model 'gpt-4o' -Name 'Helper' -Instructions 'You are 
 # 3. Start a conversation
 $thread = New-MetroAIThread
 $message = Invoke-MetroAIMessage -ThreadID $thread.id -Message "Hello, how can you help me today?"
-$run = Start-MetroAIThread -ThreadID $thread.id -AssistantId $agent.id
+$run = Start-MetroAIThreadRun -ThreadID $thread.id -AssistantId $agent.id
 
 # 4. Get the response
 Get-MetroAIMessage -ThreadID $thread.id
@@ -560,7 +560,7 @@ Please provide a business summary including:
 3. A summary of the latest quarterly reports
 "@
 
-$businessRun = Start-MetroAIThread -ThreadID $businessThread.id -AssistantId $businessAgent.id
+$businessRun = Start-MetroAIThreadRun -ThreadID $businessThread.id -AssistantId $businessAgent.id
 ```
 
 </details>

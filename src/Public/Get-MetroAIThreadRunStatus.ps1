@@ -1,4 +1,4 @@
-function Get-MetroAIThreadStatus {
+function Get-MetroAIThreadRunStatus {
     <#
     .SYNOPSIS
         Retrieves the status of a thread.
@@ -18,6 +18,6 @@ function Get-MetroAIThreadStatus {
         Invoke-MetroAIApiCall -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $ThreadID, $RunID) -Method Get
     }
     catch {
-        Write-Error "Get-MetroAIThreadStatus error: $_"
+        Write-Error "Get-MetroAIThreadRunStatus error: $_"
     }
 }

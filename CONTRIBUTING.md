@@ -71,8 +71,8 @@ src/
     ├── New-MetroAIThread.ps1
     ├── Get-MetroAIThread.ps1
     ├── Invoke-MetroAIMessage.ps1
-    ├── Start-MetroAIThread.ps1
-    ├── Get-MetroAIThreadStatus.ps1
+    ├── Start-MetroAIThreadRun.ps1
+    ├── Get-MetroAIThreadRunStatus.ps1
     ├── Get-MetroAIMessage.ps1
     ├── Start-MetroAIThreadWithMessages.ps1
     └── Add-MetroAIAgentOpenAPIDefinition.ps1

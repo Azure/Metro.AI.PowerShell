@@ -1,4 +1,4 @@
-function Start-MetroAIThread {
+function Start-MetroAIThreadRun {
     <#
     .SYNOPSIS
         Start a thread.
@@ -35,10 +35,10 @@ function Start-MetroAIThread {
             }
             else { Write-Error "Run did not complete in time." }
         }
-        else { Write-Output "Run started asynchronously. Use Get-MetroAIThreadStatus to check." }
+        else { Write-Output "Run started asynchronously. Use Get-MetroAIThreadRunStatus to check." }
         return $runResponse
     }
     catch {
-        Write-Error "Start-MetroAIThread error: $_"
+        Write-Error "Start-MetroAIThreadRun error: $_"
     }
 }
