@@ -288,7 +288,7 @@ Describe "Metro.AI PowerShell Module - Public Functions Smoke Tests" -Tags @("Sm
 
             try {
                 $threadId = $script:CreatedThreads[0]
-                $messages = Get-MetroAIMessages -ThreadId $threadId
+                $messages = Get-MetroAIMessage -ThreadId $threadId
                 $messages | Should -Not -BeNull
                 
                 # Should have at least one message (the one we added earlier)
@@ -702,7 +702,7 @@ Always cite your sources and indicate when information comes from web searches.
             }
         }
 
-        It "Get-MetroAIMessages should retrieve messages from thread or handle constraints" {
+        It "Get-MetroAIMessage should retrieve messages from thread or handle constraints" {
             if (-not $script:HasValidContext) {
                 Set-ItResult -Skipped -Because $script:SkipMessage
                 return
@@ -715,7 +715,7 @@ Always cite your sources and indicate when information comes from web searches.
 
             $threadId = $script:CreatedThreads[0]
             try {
-                $messages = Get-MetroAIMessages -ThreadId $threadId
+                $messages = Get-MetroAIMessage -ThreadId $threadId
                 $messages | Should -Not -BeNull
                 
                 # Should have at least one message
@@ -730,12 +730,6 @@ Always cite your sources and indicate when information comes from web searches.
                 throw $_
             }
         }
-
-        It "Start-MetroAIThreadRun should start a thread run or handle constraints" {
-            if (-not $script:HasValidContext) {
-                Set-ItResult -Skipped -Because $script:SkipMessage
-                return
-            }
 
         It "Start-MetroAIThreadRun should start a thread run or handle constraints" {
             if (-not $script:HasValidContext) {
@@ -1109,7 +1103,7 @@ Always cite your sources and indicate when information comes from web searches.
                 $run.id | Should -Not -BeNullOrEmpty
 
                 # Get messages
-                $messages = Get-MetroAIMessages -ThreadId $thread.id
+                $messages = Get-MetroAIMessage -ThreadId $thread.id
                 $messages | Should -Not -BeNull
                 
                 Write-Host "✅ Successfully completed full workflow (thread -> message -> run -> get messages)" -ForegroundColor Green
@@ -1217,7 +1211,7 @@ This is a test message for complex workflow validation.
                 $complexRun.id | Should -Not -BeNullOrEmpty
 
                 # Check thread status (might take time to complete)
-                $threadStatus = Get-MetroAIThreadStatus -ThreadId $complexThread.id -RunId $complexRun.id
+                $threadStatus = Get-MetroAIThreadRunStatus -ThreadId $complexThread.id -RunId $complexRun.id
                 $threadStatus | Should -Not -BeNullOrEmpty
                 
                 Write-Host "✅ Successfully completed complex thread workflow" -ForegroundColor Green

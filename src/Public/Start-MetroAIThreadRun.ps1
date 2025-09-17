@@ -35,7 +35,7 @@ function Start-MetroAIThreadRun {
             }
             else { Write-Error "Run did not complete in time." }
         }
-        else { Write-Output "Run started asynchronously. Use Get-MetroAIThreadStatus to check." }
+        else { Write-Output "Run started asynchronously. Use Get-MetroAIThreadRunStatus to check." }
         return $runResponse
     }
     catch {
