@@ -43,6 +43,7 @@
         'New-MetroAIFunction',
         'New-MetroAIThread',
         'Get-MetroAIThread',
+        'Remove-MetroAIThread',
         'Invoke-MetroAIMessage',
         'Start-MetroAIThreadRun',
         'Get-MetroAIThreadRunStatus',

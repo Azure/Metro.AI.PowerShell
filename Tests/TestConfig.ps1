@@ -98,13 +98,11 @@ Always ask clarifying questions if the user's request is unclear.
             @{
                 server_label     = 'TestWeatherAPI'
                 server_url       = 'https://weather.example.com/mcp'
-                require_approval = 'never'
             },
             @{
                 server_label     = 'TestDatabaseAPI'
                 server_url       = 'https://db.example.com/mcp'
                 allowed_tools    = @('query_data', 'get_info')
-                require_approval = 'never'
             }
         )
 

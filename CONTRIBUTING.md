@@ -151,7 +151,7 @@ Before submitting a pull request:
 
 ### MCP Server Configuration
 
-When working with MCP (Model Context Protocol) servers, note that the current implementation only supports servers with `require_approval = 'never'`. Examples and documentation should reflect this limitation.
+When working with MCP (Model Context Protocol) servers, note that the service now manages approval behavior automatically. Legacy `require_approval` settings are ignored by the API, so documentation and samples should omit this property.
 
 ### Code Style Guidelines
 

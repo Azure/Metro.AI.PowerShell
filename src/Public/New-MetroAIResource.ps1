@@ -79,10 +79,9 @@ function New-MetroAIResource {
     .PARAMETER McpServerUrl
         URL of the MCP server endpoint. Must start with http:// or https://.
     .PARAMETER McpRequireApproval
-        Approval policy for MCP server actions: 'never', 'once', or 'always'. Default is 'never'.
+        (Deprecated) Previously controlled MCP server approval behavior. Retained for backward compatibility but ignored because the API no longer accepts approval settings.
     .PARAMETER McpServersConfiguration
-        Array of MCP server configurations. Each must have 'server_label', 'server_url', and optionally 'require_approval' and 'allowed_tools' properties.
-        The 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server.
+        Array of MCP server configurations. Each must have 'server_label' and 'server_url'. The optional 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server. Any legacy 'require_approval' values are ignored by the API.
     .EXAMPLE
         New-MetroAIResource -Model 'gpt-4.1' -Name 'MyAssistant' -Description 'General purpose assistant'
     .EXAMPLE
@@ -95,12 +94,12 @@ function New-MetroAIResource {
         New-MetroAIResource -Model 'gpt-4.1' -Name 'CodeHelper' -EnableCodeInterpreter -CodeInterpreterFileIds @('file-123')
     .EXAMPLE
         # Create assistant with MCP server integration
-        New-MetroAIResource -Model 'gpt-4.1' -Name 'MCPBot' -EnableMcp -McpServerLabel 'DatabaseServer' -McpServerUrl 'https://api.example.com/mcp' -McpRequireApproval 'once'
+        New-MetroAIResource -Model 'gpt-4.1' -Name 'MCPBot' -EnableMcp -McpServerLabel 'DatabaseServer' -McpServerUrl 'https://api.example.com/mcp'
     .EXAMPLE
         # Create assistant with multiple MCP servers
         $mcpServers = @(
-            @{ server_label = 'WeatherAPI'; server_url = 'https://weather.example.com/mcp'; require_approval = 'never' },
-            @{ server_label = 'DatabaseAPI'; server_url = 'https://db.example.com/mcp'; require_approval = 'once'; allowed_tools = @('query_db', 'update_record') }
+            @{ server_label = 'WeatherAPI'; server_url = 'https://weather.example.com/mcp' },
+            @{ server_label = 'DatabaseAPI'; server_url = 'https://db.example.com/mcp'; allowed_tools = @('query_db', 'update_record') }
         )
         New-MetroAIResource -Model 'gpt-4.1' -Name 'MultiMCPBot' -McpServersConfiguration $mcpServers
     .EXAMPLE
@@ -315,8 +314,7 @@ function New-MetroAIResource {
         [string]$McpServerUrl,
 
         [Parameter(ParameterSetName = 'Parameters')]
-        [ValidateSet('never', 'once', 'always')]
-        [string]$McpRequireApproval = 'never',
+        [string]$McpRequireApproval,
 
         [Parameter(ParameterSetName = 'Parameters')]
         [ValidateScript({
@@ -326,9 +324,6 @@ function New-MetroAIResource {
                     }
                     if ($server.server_label.Length -gt 256) { throw "MCP server label exceeds 256 characters" }
                     if ($server.server_url -notmatch '^https?://') { throw "MCP server URL must start with http:// or https://" }
-                    if ($server.require_approval -and $server.require_approval -notin @('never', 'once', 'always')) {
-                        throw "MCP server require_approval must be 'never', 'once', or 'always'"
-                    }
                     if ($server.allowed_tools -and $server.allowed_tools -isnot [array]) {
                         throw "MCP server allowed_tools must be an array of strings"
                     }
@@ -351,6 +346,10 @@ function New-MetroAIResource {
 
     process {
         try {
+            if ($PSBoundParameters.ContainsKey('McpRequireApproval') -and $McpRequireApproval) {
+                Write-Warning "The 'McpRequireApproval' parameter is ignored. The API no longer accepts approval settings for MCP servers."
+            }
+
             # Handle JSON file input
             if ($PSCmdlet.ParameterSetName -eq 'Json') {
                 Write-Verbose "Processing input file: $InputFile"
@@ -653,22 +652,27 @@ function New-MetroAIResource {
                     Write-Verbose "Configuring MCP server tool: $McpServerLabel at $McpServerUrl"
 
                     $tools.Add(@{
-                            type             = 'mcp'
-                            server_label     = $McpServerLabel
-                            server_url       = $McpServerUrl
-                            require_approval = $McpRequireApproval
+                            type         = 'mcp'
+                            server_label = $McpServerLabel
+                            server_url   = $McpServerUrl
                         })
-                    Write-Verbose "Added MCP server tool: $McpServerLabel with approval policy: $McpRequireApproval"
+                    $defaultApproval = if ($PSBoundParameters.ContainsKey('McpRequireApproval') -and $McpRequireApproval) { $McpRequireApproval } else { 'never' }
+                    $toolResources = Add-MetroMcpServerResource -ToolResources $toolResources -ServerLabel $McpServerLabel -ServerUrl $McpServerUrl -RequireApproval $defaultApproval
+                    Write-Verbose "Added MCP server tool: $McpServerLabel"
                 }
 
                 if ($McpServersConfiguration) {
                     Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
                     foreach ($server in $McpServersConfiguration) {
+                        $serverProperties = if ($server -is [hashtable]) { $server.Keys } else { $server.PSObject.Properties.Name }
+                        if ($serverProperties -contains 'require_approval' -and $server.require_approval) {
+                            Write-Warning "MCP server configuration '$($server.server_label)' includes 'require_approval', which is ignored by the API."
+                        }
+
                         $mcpTool = @{
-                            type             = 'mcp'
-                            server_label     = $server.server_label
-                            server_url       = $server.server_url
-                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                            type         = 'mcp'
+                            server_label = $server.server_label
+                            server_url   = $server.server_url
                         }
                         
                         # Add allowed_tools if specified
@@ -676,8 +680,10 @@ function New-MetroAIResource {
                             $mcpTool.allowed_tools = $server.allowed_tools
                             Write-Verbose "Added allowed_tools for MCP server $($server.server_label): $($server.allowed_tools -join ', ')"
                         }
-                        
+
                         $tools.Add($mcpTool)
+                        $approvalSetting = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                        $toolResources = Add-MetroMcpServerResource -ToolResources $toolResources -ServerLabel $server.server_label -ServerUrl $server.server_url -RequireApproval $approvalSetting
                         Write-Verbose "Added MCP server tool: $($server.server_label) at $($server.server_url)"
                     }
                 }

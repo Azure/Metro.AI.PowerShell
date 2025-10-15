@@ -45,14 +45,13 @@ function Set-MetroAIResource {
     .PARAMETER McpServerUrl
         URL of the MCP server endpoint. Must start with http:// or https://.
     .PARAMETER McpRequireApproval
-        Approval policy for MCP server actions: 'never', 'once', or 'always'. Default is 'never'.
+        (Deprecated) Previously controlled MCP server approval behavior. Retained for backward compatibility but ignored because the API no longer accepts approval settings.
     .PARAMETER AddMcp
         Switch to add MCP server to existing tools without replacing them.
     .PARAMETER RemoveMcp
         Switch to remove all MCP servers from existing tools.
     .PARAMETER McpServersConfiguration
-        Array of MCP server configurations. Each must have 'server_label', 'server_url', and optionally 'require_approval' and 'allowed_tools' properties.
-        The 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server.
+        Array of MCP server configurations. Each must have 'server_label' and 'server_url'. The optional 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server. Any legacy 'require_approval' values are ignored by the API.
     .EXAMPLE
         Set-MetroAIResource -AssistantId 'asst-123' -InputFile './updated-assistant.json'
     .EXAMPLE
@@ -62,12 +61,12 @@ function Set-MetroAIResource {
         Set-MetroAIResource -AssistantId 'asst-123' -AddMcp -McpServerLabel 'WeatherAPI' -McpServerUrl 'https://weather.example.com/mcp'
     .EXAMPLE
         # Replace all tools with MCP server only
-        Set-MetroAIResource -AssistantId 'asst-123' -ClearAllTools -EnableMcp -McpServerLabel 'DatabaseAPI' -McpServerUrl 'https://db.example.com/mcp' -McpRequireApproval 'once'
+        Set-MetroAIResource -AssistantId 'asst-123' -ClearAllTools -EnableMcp -McpServerLabel 'DatabaseAPI' -McpServerUrl 'https://db.example.com/mcp'
     .EXAMPLE
         # Add multiple MCP servers
         $mcpServers = @(
-            @{ server_label = 'API1'; server_url = 'https://api1.example.com/mcp'; require_approval = 'never' },
-            @{ server_label = 'API2'; server_url = 'https://api2.example.com/mcp'; require_approval = 'always' }
+            @{ server_label = 'API1'; server_url = 'https://api1.example.com/mcp' },
+            @{ server_label = 'API2'; server_url = 'https://api2.example.com/mcp' }
         )
         Set-MetroAIResource -AssistantId 'asst-123' -McpServersConfiguration $mcpServers
     .EXAMPLE
@@ -196,8 +195,7 @@ function Set-MetroAIResource {
 
         [Parameter(ParameterSetName = 'Parameters')]
         [Parameter(ParameterSetName = 'InputObject')]
-        [ValidateSet('never', 'once', 'always')]
-        [string]$McpRequireApproval = 'never',
+        [string]$McpRequireApproval,
 
         [Parameter(ParameterSetName = 'Parameters')]
         [Parameter(ParameterSetName = 'InputObject')]
@@ -216,9 +214,6 @@ function Set-MetroAIResource {
                     }
                     if ($server.server_label.Length -gt 256) { throw "MCP server label exceeds 256 characters" }
                     if ($server.server_url -notmatch '^https?://') { throw "MCP server URL must start with http:// or https://" }
-                    if ($server.require_approval -and $server.require_approval -notin @('never', 'once', 'always')) {
-                        throw "MCP server require_approval must be 'never', 'once', or 'always'"
-                    }
                     if ($server.allowed_tools -and $server.allowed_tools -isnot [array]) {
                         throw "MCP server allowed_tools must be an array of strings"
                     }
@@ -264,6 +259,10 @@ function Set-MetroAIResource {
             # Validate MCP parameters are provided when needed
             if (($EnableMcp -or $AddMcp) -and (-not $McpServerLabel -or -not $McpServerUrl)) {
                 throw "McpServerLabel and McpServerUrl are required when using -EnableMcp or -AddMcp."
+            }
+
+            if ($PSBoundParameters.ContainsKey('McpRequireApproval') -and $McpRequireApproval) {
+                Write-Warning "The 'McpRequireApproval' parameter is ignored. The API no longer accepts approval settings for MCP servers."
             }
 
             if ($PSCmdlet.ParameterSetName -eq 'Json') {
@@ -317,23 +316,22 @@ function Set-MetroAIResource {
                 if ($PSBoundParameters.ContainsKey('Temperature')) { $requestBody.temperature = $Temperature }
                 if ($PSBoundParameters.ContainsKey('TopP')) { $requestBody.top_p = $TopP }
 
+                # Normalize tool_resources for pipeline input
+                $toolResourcesHash = @{}
+                if ($requestBody.tool_resources) {
+                    $requestBody.tool_resources.PSObject.Properties | ForEach-Object {
+                        $toolResourcesHash[$_.Name] = $_.Value
+                    }
+                }
+                $requestBody | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value $toolResourcesHash -Force
+
                 # Handle Code Interpreter configuration for pipeline input
                 if ($EnableCodeInterpreter -or $CodeInterpreterFileIds) {
                     # Get existing file IDs from current resource
                     $existingFileIds = @()
-                    if ($requestBody.tool_resources -and $requestBody.tool_resources.code_interpreter -and $requestBody.tool_resources.code_interpreter.file_ids) {
-                        $existingFileIds = $requestBody.tool_resources.code_interpreter.file_ids
+                    if ($toolResourcesHash.code_interpreter -and $toolResourcesHash.code_interpreter.file_ids) {
+                        $existingFileIds = $toolResourcesHash.code_interpreter.file_ids
                     }
-
-                    # Convert tool_resources to hashtable if it doesn't exist or recreate it
-                    $toolResourcesHash = @{}
-                    if ($requestBody.tool_resources) {
-                        # Convert existing tool_resources to hashtable
-                        $requestBody.tool_resources.PSObject.Properties | ForEach-Object {
-                            $toolResourcesHash[$_.Name] = $_.Value
-                        }
-                    }
-                    $requestBody | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value $toolResourcesHash -Force
 
                     # Use helper function to configure Code Interpreter
                     Set-CodeInterpreterConfiguration -RequestBody $requestBody -ExistingFileIds $existingFileIds -NewFileIds $CodeInterpreterFileIds -EnableCodeInterpreter:$EnableCodeInterpreter
@@ -401,12 +399,13 @@ function Set-MetroAIResource {
                     Write-Verbose "Adding MCP server tool: $McpServerLabel at $McpServerUrl"
 
                     $mcpTool = @{
-                        type             = 'mcp'
-                        server_label     = $McpServerLabel
-                        server_url       = $McpServerUrl
-                        require_approval = $McpRequireApproval
+                        type         = 'mcp'
+                        server_label = $McpServerLabel
+                        server_url   = $McpServerUrl
                     }
                     $newTools.Add($mcpTool)
+                    $approvalSetting = if ($PSBoundParameters.ContainsKey('McpRequireApproval') -and $McpRequireApproval) { $McpRequireApproval } else { 'never' }
+                    $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $McpServerLabel -ServerUrl $McpServerUrl -RequireApproval $approvalSetting
                     Write-Verbose "Added MCP server tool: $McpServerLabel"
                 }
 
@@ -414,11 +413,15 @@ function Set-MetroAIResource {
                 if ($McpServersConfiguration) {
                     Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
                     foreach ($server in $McpServersConfiguration) {
+                        $serverProperties = if ($server -is [hashtable]) { $server.Keys } else { $server.PSObject.Properties.Name }
+                        if ($serverProperties -contains 'require_approval' -and $server.require_approval) {
+                            Write-Warning "MCP server configuration '$($server.server_label)' includes 'require_approval', which is ignored by the API."
+                        }
+
                         $mcpTool = @{
-                            type             = 'mcp'
-                            server_label     = $server.server_label
-                            server_url       = $server.server_url
-                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                            type         = 'mcp'
+                            server_label = $server.server_label
+                            server_url   = $server.server_url
                         }
                         
                         # Add allowed_tools if specified
@@ -428,12 +431,17 @@ function Set-MetroAIResource {
                         }
                         
                         $newTools.Add($mcpTool)
+                        $approvalSetting = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                        $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $server.server_label -ServerUrl $server.server_url -RequireApproval $approvalSetting
                         Write-Verbose "Added MCP server tool: $($server.server_label)"
                     }
                 }
 
                 # Set tools in request body
                 $requestBody.tools = $newTools.ToArray()
+
+                # Update tool_resources with MCP server definitions
+                $requestBody.tool_resources = $toolResourcesHash
 
                 # Build confirmation message
                 $changes = @()
@@ -484,6 +492,14 @@ function Set-MetroAIResource {
                 # Handle tools configuration
                 $currentTools = if ($currentResource.tools) { $currentResource.tools } else { @() }
                 $newTools = [System.Collections.Generic.List[object]]::new()
+
+                # Prepare tool_resources baseline
+                $toolResourcesHash = @{}
+                if ($currentResource.tool_resources) {
+                    $currentResource.tool_resources.PSObject.Properties | ForEach-Object {
+                        $toolResourcesHash[$_.Name] = $_.Value
+                    }
+                }
 
                 if ($ClearAllTools) {
                     Write-Verbose "Clearing all existing tools"
@@ -543,12 +559,13 @@ function Set-MetroAIResource {
                     Write-Verbose "Adding MCP server tool: $McpServerLabel at $McpServerUrl"
 
                     $mcpTool = @{
-                        type             = 'mcp'
-                        server_label     = $McpServerLabel
-                        server_url       = $McpServerUrl
-                        require_approval = $McpRequireApproval
+                        type         = 'mcp'
+                        server_label = $McpServerLabel
+                        server_url   = $McpServerUrl
                     }
                     $newTools.Add($mcpTool)
+                    $approvalSetting = if ($PSBoundParameters.ContainsKey('McpRequireApproval') -and $McpRequireApproval) { $McpRequireApproval } else { 'never' }
+                    $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $McpServerLabel -ServerUrl $McpServerUrl -RequireApproval $approvalSetting
                     Write-Verbose "Added MCP server tool: $McpServerLabel"
                 }
 
@@ -556,11 +573,15 @@ function Set-MetroAIResource {
                 if ($McpServersConfiguration) {
                     Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
                     foreach ($server in $McpServersConfiguration) {
+                        $serverProperties = if ($server -is [hashtable]) { $server.Keys } else { $server.PSObject.Properties.Name }
+                        if ($serverProperties -contains 'require_approval' -and $server.require_approval) {
+                            Write-Warning "MCP server configuration '$($server.server_label)' includes 'require_approval', which is ignored by the API."
+                        }
+
                         $mcpTool = @{
-                            type             = 'mcp'
-                            server_label     = $server.server_label
-                            server_url       = $server.server_url
-                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                            type         = 'mcp'
+                            server_label = $server.server_label
+                            server_url   = $server.server_url
                         }
                         
                         # Add allowed_tools if specified
@@ -570,21 +591,14 @@ function Set-MetroAIResource {
                         }
                         
                         $newTools.Add($mcpTool)
+                        $approvalSetting = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                        $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $server.server_label -ServerUrl $server.server_url -RequireApproval $approvalSetting
                         Write-Verbose "Added MCP server tool: $($server.server_label)"
                     }
                 }
 
                 # Set tools in request body
                 $requestBody.tools = $newTools.ToArray()
-
-                # Handle tool_resources properly by converting to hashtable
-                $toolResourcesHash = @{}
-                if ($currentResource.tool_resources) {
-                    # Convert existing tool_resources to hashtable
-                    $currentResource.tool_resources.PSObject.Properties | ForEach-Object {
-                        $toolResourcesHash[$_.Name] = $_.Value
-                    }
-                }
                 $requestBody.tool_resources = $toolResourcesHash
 
                 # Handle Code Interpreter configuration for parameter-based updates

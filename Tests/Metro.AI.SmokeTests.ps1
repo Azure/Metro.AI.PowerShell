@@ -447,13 +447,11 @@ Always cite your sources and indicate when information comes from web searches.
                 @{
                     server_label     = 'WeatherAPI'
                     server_url       = 'https://weather.example.com/mcp'
-                    require_approval = 'never'
                 },
                 @{
                     server_label     = 'DatabaseAPI'
                     server_url       = 'https://db.example.com/mcp'
                     allowed_tools    = @('tool1', 'tool2')
-                    require_approval = 'never'
                 }
             )
 

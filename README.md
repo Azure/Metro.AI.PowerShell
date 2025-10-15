@@ -312,19 +312,16 @@ $mcpServers = @(
     @{
         server_label = 'WeatherAPI'
         server_url = 'https://weather.example.com/mcp'
-        require_approval = 'never'
     },
     @{
         server_label = 'DatabaseAPI'
         server_url = 'https://db.example.com/mcp'
         allowed_tools = @('tool1','tool2') # Limit tool usage
-        require_approval = 'never'
     },
     @{
         server_label = 'DocumentAPI'
         server_url = 'https://docs.example.com/mcp'
         allowed_tools = @('tool1','tool2') # Limit tool usage
-        require_approval = 'never'
     }
 )
 
@@ -343,6 +340,8 @@ which external service you're consulting for their query.
 "@
 ```
 
+> **Note:** Approval behavior for MCP servers is now managed by Azure AI Foundry. The previous `require_approval` setting is ignored by the service and does not need to be specified.
+
 #### Adding MCP Server Support to Existing Agents
 
 You can add MCP server capabilities to existing agents without replacing their current tools:
@@ -351,20 +350,17 @@ You can add MCP server capabilities to existing agents without replacing their c
 # Add a single MCP server to an existing agent
 Set-MetroAIAgent -AssistantId 'asst-123' -AddMcp `
     -McpServerLabel 'WeatherAPI' `
-    -McpServerUrl 'https://weather.example.com/mcp' `
-    -McpRequireApproval 'never'
+    -McpServerUrl 'https://weather.example.com/mcp'
 
 # Add multiple MCP servers to an existing agent
 $newMcpServers = @(
     @{
         server_label = 'NewsAPI'
         server_url = 'https://news.example.com/mcp'
-        require_approval = 'never'
     },
     @{
         server_label = 'TranslationAPI'
         server_url = 'https://translate.example.com/mcp'
-        require_approval = 'never'
     }
 )
 
@@ -518,19 +514,16 @@ $comprehensiveMcpServers = @(
         server_label = 'WeatherService'
         server_url = 'https://weather.example.com/mcp'
         allowed_tools = @('get_current_weather', 'get_forecast')
-        require_approval = 'never'
     },
     @{
         server_label = 'DatabaseService'
         server_url = 'https://db.example.com/mcp'
         allowed_tools = @('query_customers', 'update_records', 'generate_reports')
-        require_approval = 'once'
     },
     @{
         server_label = 'DocumentService'
         server_url = 'https://docs.example.com/mcp'
         allowed_tools = @('search_documents', 'create_summary', 'extract_data')
-        require_approval = 'never'
     }
 )
 
@@ -589,4 +582,3 @@ For more information see the [Code of Conduct FAQ](https://opensource.microsoft.
 ## 🏷️ Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks/usage/general). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party's policies.
-

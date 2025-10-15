@@ -15,7 +15,15 @@ function Invoke-MetroAIMessage {
         [Parameter(Mandatory = $true)] [string]$Message
     )
     try {
-        $body = @(@{ role = "user"; content = $Message })
+        $body = @{
+            role    = "user"
+            content = @(
+                @{
+                    type = "text"
+                    text = $Message
+                }
+            )
+        }
         Invoke-MetroAIApiCall -Service 'threads' -Operation 'thread' -Path ("{0}/messages" -f $ThreadID) -Method Post -ContentType "application/json" -Body $body
     }
     catch {
