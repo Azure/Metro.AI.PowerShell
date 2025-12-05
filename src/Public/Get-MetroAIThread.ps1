@@ -12,8 +12,7 @@ function Get-MetroAIThread {
         [string]$ThreadID
     )
     try {
-        $result = Invoke-MetroAIApiCall -Service 'threads' -Operation 'thread' -Path $ThreadID -Method Get
-        if ($PSBoundParameters['ThreadID']) { return $result } else { return $result.data }
+        throw "Threads are not supported in the Foundry Agents preview API. Use Get-MetroAIConversation instead."
     }
     catch {
         Write-Error "Get-MetroAIThread error: $_"

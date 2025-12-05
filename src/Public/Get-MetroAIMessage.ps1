@@ -12,7 +12,7 @@ function Get-MetroAIMessage {
         [Parameter(Mandatory = $true)] [string]$ThreadID
     )
     try {
-        Invoke-MetroAIApiCall -Service 'threads' -Operation 'messages' -Path ("{0}/messages" -f $ThreadID) -Method Get | Select-Object -ExpandProperty data
+        throw "Thread messages are not supported in the Foundry Agents preview API. Use Get-MetroAIConversation and Get-MetroAIResponse instead."
     }
     catch {
         Write-Error "Get-MetroAIMessage error: $_"

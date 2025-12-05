@@ -27,34 +27,7 @@ function New-MetroAIFunction {
         [Parameter(Mandatory = $true)] [string]$Instructions
     )
     try {
-        $resource = Get-MetroAIResource -AssistantId $AssistantId -Endpoint $Endpoint -ApiType $ApiType
-        $model = $resource.model
-        $reqProps = @{
-            $RequiredPropertyName = @{
-                type        = "string"
-                description = $PropertyDescription
-            }
-        }
-        $body = @{
-            instructions = $Instructions
-            tools        = @(
-                @{
-                    type     = "function"
-                    function = @{
-                        name        = $Name
-                        description = $Description
-                        parameters  = @{
-                            type       = "object"
-                            properties = $reqProps
-                            required   = @($RequiredPropertyName)
-                        }
-                    }
-                }
-            )
-            id           = $AssistantId
-            model        = $model
-        }
-        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'get' -Method Post -ContentType "application/json" -Body $body
+        throw "New-MetroAIFunction is not supported with the Foundry Agents preview API. Please add tools via New/Set-MetroAIResource instead."
     }
     catch {
         Write-Error "New-MetroAIFunction error: $_"

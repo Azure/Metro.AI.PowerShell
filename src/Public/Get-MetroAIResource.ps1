@@ -21,8 +21,16 @@ function Get-MetroAIResource {
     )
     try {
         $path = $AssistantId
-        $result = Invoke-MetroAIApiCall -Service 'assistants' -Operation 'get' -Path $path -Method Get
-        if ($PSBoundParameters['AssistantId']) { return $result } else { return $result.data }
+        $result = Invoke-MetroAIApiCall -Service 'agents' -Operation 'get' -Path $path -Method Get
+        if ($PSBoundParameters['AssistantId']) {
+            return $result
+        }
+        elseif ($result.PSObject.Properties.Name -contains 'value') {
+            return $result.value
+        }
+        else {
+            return $result
+        }
     }
     catch {
         Write-Error "Get-MetroAIResource error: $_"

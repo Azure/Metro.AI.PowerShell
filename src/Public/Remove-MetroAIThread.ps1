@@ -30,6 +30,7 @@ function Remove-MetroAIThread {
     }
 
     process {
+        throw "Threads are not supported in the Foundry Agents preview API. Use Remove-MetroAIConversation instead."
         switch ($PSCmdlet.ParameterSetName) {
             'ById' {
                 foreach ($id in $ThreadId) {

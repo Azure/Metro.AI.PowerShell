@@ -21,25 +21,7 @@ function Add-MetroAIAgentOpenAPIDefinition {
         [string]$Description = ""
     )
     try {
-        if ($ApiType -ne 'Agent') { throw "Only Agent API type is supported." }
-        $openAPISpec = Get-Content -Path $DefinitionFile -Raw | ConvertFrom-Json
-        $body = @{
-            tools = @(
-                @{
-                    type    = "openapi"
-                    openapi = @{
-                        name        = $Name
-                        description = $Description
-                        auth        = @{
-                            type            = "managed_identity"
-                            security_scheme = @{ audience = "https://cognitiveservices.azure.com/" }
-                        }
-                        spec        = $openAPISpec
-                    }
-                }
-            )
-        }
-        Invoke-MetroAIApiCall -Service 'assistants' -Operation 'openapi' -Path $AgentId -Method Post -ContentType "application/json" -Body $body
+        throw "Add-MetroAIAgentOpenAPIDefinition is not supported with the Foundry Agents preview API. Please include OpenAPI tools via New/Set-MetroAIResource."
     }
     catch {
         Write-Error "Add-MetroAIAgentOpenAPIDefinition error: $_"

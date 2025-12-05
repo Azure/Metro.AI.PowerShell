@@ -12,7 +12,7 @@ Metro.AI is a powerful PowerShell module that simplifies working with **Azure AI
 - [🔧 Setup & Configuration](#-setup--configuration)
 - [📚 Core Features](#-core-features)
   - [Agent Management](#agent-management)
-  - [Thread & Message Handling](#thread--message-handling)
+  - [Conversation & Response Handling](#conversation--response-handling-foundry-agents-preview)
   - [Advanced Agent Orchestration](#advanced-agent-orchestration)
   - [Bing Grounding Integration](#bing-grounding-integration)
   - [MCP Server Integration](#mcp-server-integration)
@@ -69,13 +69,11 @@ Define your agent's instructions and create a new Metro.AI agent using GPT-4o:
 
 ```powershell
 $instructions = @"
-You are a helpful assistant. Your task is to assist the user with their queries and provide relevant information.
-You should always be polite and respectful. If you do not know the answer to a question, you should say so.
-You should not provide personal opinions or make assumptions about the user.
-Always ask clarifying questions if the user's request is unclear.
+You are a helpful assistant. Keep responses concise and cite sources when relevant.
 "@
 
-New-MetroAIAgent -ResourceName "myAgent" -Model "gpt-4o" -Instructions $instructions
+# Create a new agent with specific model and instructions
+New-MetroAIAgent -Name "myAgent" -Model "gpt-4o" -Instructions $instructions
 ```
 
 #### 📋 Working with Existing Agents
@@ -88,10 +86,11 @@ You can create a new agent based on an existing one using PowerShell pipeline op
 
 ```powershell
 # Get an existing agent and create a copy with a new name
-$originalAgent = Get-MetroAIAgent -AssistantId "asst_abc123"
+$originalAgent = Get-MetroAIAgent -AssistantId "agent_abc123"
 $copiedAgent = $originalAgent | New-MetroAIAgent -Name "CopiedAgent"
 
 # Copy with modifications - override specific properties while copying
+# This creates a NEW agent based on the original, but with a different model and description
 $enhancedAgent = $originalAgent | New-MetroAIAgent -Name "EnhancedAgent" `
     -Model "gpt-4o" `
     -Description "Enhanced version of the original agent"
@@ -104,21 +103,21 @@ Write-Output "Created new agent: $($enhancedAgent.name) with ID: $($enhancedAgen
 You can modify an agent object and update it seamlessly:
 
 ```powershell
-# Get an agent, modify its properties, and update it
-$agent = Get-MetroAIAgent -AssistantId "asst_abc123"
+# Get an agent, modify its properties locally, and then push the update
+$agent = Get-MetroAIAgent -AssistantId "agent_abc123"
 $agent.Description = "Updated description for better clarity"
-$agent.Instructions = @"
+$agent.definition.instructions = @"
 You are an expert PowerShell assistant. Help users with PowerShell scripting,
 automation, and Azure management tasks. Always provide working examples
 and explain best practices.
 "@
 
-# Update the agent with the modified properties and enable Code Interpreter
-$updatedAgent = $agent | Set-MetroAIAgent -EnableCodeInterpreter -CodeInterpreterFileIds @()
+# Update the agent with the modified properties
+$updatedAgent = $agent | Set-MetroAIAgent
 Write-Output "Updated agent: $($updatedAgent.name)"
 
-# You can also override specific properties during the update
-Get-MetroAIAgent -AssistantId "asst_abc123" | Set-MetroAIAgent -Name "NewName" -Temperature 0.5
+# You can also override specific properties directly via parameters during the update
+Get-MetroAIAgent -AssistantId "agent_abc123" | Set-MetroAIAgent -Name "NewName" -Temperature 0.5
 ```
 
 ##### 📥📤 Exporting and Importing Agent Configurations
@@ -127,7 +126,7 @@ Export an agent configuration to JSON for backup, version control, or sharing:
 
 ```powershell
 # Export an existing agent to JSON file
-$agent = Get-MetroAIAgent -AssistantId "asst_abc123"
+$agent = Get-MetroAIAgent -AssistantId "agent_abc123"
 $agent | ConvertTo-Json -Depth 100 | Out-File -FilePath "./my-agent-backup.json" -Encoding UTF8
 
 Write-Output "Agent configuration exported to my-agent-backup.json"
@@ -137,131 +136,82 @@ $newAgentFromFile = New-MetroAIAgent -InputFile "./my-agent-backup.json"
 Write-Output "Created agent from file: $($newAgentFromFile.name) with ID: $($newAgentFromFile.id)"
 
 # Update an existing agent from a JSON file
-Set-MetroAIAgent -AssistantId "asst_xyz789" -InputFile "./my-agent-backup.json"
+Set-MetroAIAgent -AssistantId "agent_xyz789" -InputFile "./my-agent-backup.json"
 ```
 
-### Thread & Message Handling
+### Conversation & Response Handling (Foundry Agents Preview)
 
-#### 💬 Creating and Managing Threads
-
-Start a new conversation thread:
+Start a conversation and send a turn using the preview Responses API:
 
 ```powershell
-$thread = New-MetroAIThread
+# Create a simple helper agent
+$agent = New-MetroAIAgent -Model 'gpt-4o' -Name 'Helper' -Instructions 'You are a helpful assistant.'
+
+# Create a new conversation thread
+$conv  = New-MetroAIConversation
+
+# Send a message to the agent within the conversation
+$turn  = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $conv.id -Input "Hello, how can you help me today?" -Verbose
+
+# Display the agent's response
+$turn.AssistantText
 ```
 
-Add a message to the thread:
+List, inspect, or delete conversations/responses:
 
 ```powershell
-$message = Invoke-MetroAIMessage -ThreadID $thread.id -Message "Hello, can you generate a PowerShell script that I can download as a file to connect to Azure?"
+Get-MetroAIConversation
+Get-MetroAIConversation -ConversationId $conv.id
+Get-MetroAIResponse
+Remove-MetroAIResponse -ResponseId $turn.ResponseId -Confirm:$false
+Remove-MetroAIConversation -ConversationId $conv.id -Confirm:$false
 ```
 
-Execute the thread with your agent:
+#### 💬 Multi-Turn Conversation Example
+
+Here is a complete example of a multi-turn conversation where the context is maintained across multiple messages:
 
 ```powershell
-$run = Start-MetroAIThreadRun -ThreadID $thread.id -AssistantId $agent.id
+# 1. Setup: Create an AI Expert agent and a conversation thread
+$agent = New-MetroAIAgent -Model 'gpt-4o' -Name 'AIExpert' -Instructions 'You are an expert in Artificial Intelligence concepts. Explain complex topics simply.'
+$thread = New-MetroAIConversation
+Write-Host "Created thread: $($thread.id)"
+
+# 2. First Turn: Ask about Model Knowledge vs RAG
+$turn1 = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $thread.id -Input "What is the difference between a model's internal knowledge and RAG?"
+Write-Host "Agent: $($turn1.AssistantText)"
+# Output: Agent: Internal knowledge is what the model learned during training (static). RAG (Retrieval-Augmented Generation) allows the model to access external, up-to-date data at runtime.
+
+# 3. Second Turn: Follow up about Fine-tuning (context aware)
+$turn2 = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $thread.id -Input "How does fine-tuning fit into this picture?"
+Write-Host "Agent: $($turn2.AssistantText)"
+# Output: Agent: Fine-tuning updates the model's weights to learn a specific style or domain language, whereas RAG provides facts. Fine-tuning changes *how* it talks; RAG changes *what* it knows.
+
+# 4. Third Turn: Ask about Prompt Engineering
+$turn3 = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $thread.id -Input "And where does prompt engineering come in?"
+Write-Host "Agent: $($turn3.AssistantText)"
+# Output: Agent: Prompt engineering is the art of crafting inputs to guide the model's behavior without changing its weights or external data. It's the most lightweight way to steer the model.
+
+# 5. Cleanup
+Remove-MetroAIConversation -ConversationId $thread.id -Confirm:$false
 ```
 
-#### 📁 Working with Generated Files
-
-After execution, the agent can generate downloadable files:
-
-```powershell
-# List available output files
-Get-MetroAIOutputFiles
-
-# Download the file locally
-Get-MetroAIOutputFiles -FileId $run.annotations.file_path.file_id -LocalFilePath ConnectToAzure.ps1
-```
-
-You can now use the downloaded `ConnectToAzure.ps1` script to establish a connection to Azure.
-
-### Advanced Agent Orchestration
+### Advanced Agent Orchestration (Coming Soon)
 
 #### 🕸️ Creating Specialized Agent Networks
 
-For complex scenarios involving multiple specialized agents, you can create a network of agents where a proxy agent coordinates with specialized agents:
+> **Note:** Advanced agent orchestration features are currently in development and will be available in a future release.
 
-```powershell
-# Define specialized agents with their roles and instructions
-$specializedAgents = @{
-   "MarketAgent"     = @{
-      "Description"  = "Agent that provides market data and analysis."
-      "Instructions" = "Provide real-time market data and analysis to the proxy agent."
-   }
-   "TradingAgent"    = @{
-      "Description"  = "Agent that executes trades based on market conditions."
-      "Instructions" = "Execute trades based on the analysis provided by the MarketAgent."
-   }
-   "ResearchAgent"   = @{
-      "Description"  = "Agent that conducts research and provides insights."
-      "Instructions" = "Conduct research and provide insights to the proxy agent."
-   }
-   "ComplianceAgent" = @{
-      "Description"  = "Agent that ensures compliance with regulations."
-      "Instructions" = "Ensure all actions taken by the proxy agent comply with relevant regulations."
-   }
-}
-
-# Create specialized agents
-$createdAgents = @()
-foreach ($agent in $specializedAgents.GetEnumerator()) {
-   $agentDetails = $specializedAgents[$agent.Key]
-   Write-Output "Creating agent: $($agent.Key)"
-
-   $createdAgents += New-MetroAIAgent -Model 'gpt-4o' -Name $agent.Key `
-      -Instructions $agentDetails.Instructions `
-      -Description $agentDetails.Description -Verbose
-}
-
-# Create proxy agent that orchestrates the specialized agents
-$proxyAgent = New-MetroAIAgent -Model 'gpt-4o' -Name 'ProxyAgent' `
-   -ConnectedAgentsDefinition ($createdAgents | Select-Object id, name, description) `
-   -Description 'Proxy agent that connects to specialized agents for market analysis, trading, research, and compliance.' `
-   -Instructions 'This agent will connect to specialized agents to perform tasks related to market analysis, trading, research, and compliance. Coordinate with the appropriate specialized agents based on the user request and ensure all compliance requirements are met.' `
-   -Verbose
-
-Write-Output "Created proxy agent with ID: $($proxyAgent.id)"
-```
-
-##### 🎯 Using the Proxy Agent Network
-
-Once your agent network is established, you can interact with the proxy agent:
-
-```powershell
-# Create a thread for the proxy agent
-$proxyThread = New-MetroAIThread
-
-# Send a complex request that requires multiple agents
-$complexMessage = Invoke-MetroAIMessage -ThreadID $proxyThread.id -Message @"
-I need to analyze the current market conditions for tech stocks,
-execute a small trade if conditions are favorable,
-research the regulatory implications,
-and ensure everything complies with current trading regulations.
-"@
-
-# Execute with the proxy agent
-$proxyRun = Start-MetroAIThreadRun -ThreadID $proxyThread.id -AssistantId $proxyAgent.id -Async
-
-# Monitor the run status
-do {
-    Start-Sleep -Seconds 2
-    $runStatus = Get-MetroAIThreadRunStatus -ThreadID $proxyThread.id -RunId $proxyRun.id
-    Write-Output "Run Status: $($runStatus.status)"
-} while ($runStatus.status -in @("queued", "in_progress"))
-
-# Get the coordinated response
-Get-MetroAIMessage -ThreadID $proxyThread.id
-```
+For complex scenarios involving multiple specialized agents, you can create a network of agents where a proxy agent coordinates with specialized agents.
 
 ### Bing Grounding Integration
 
 #### 🔍 Creating an Agent with Bing Search Capabilities
 
-You can create an agent that uses Bing search to provide real-time web information:
+You can create an agent that uses Bing search to provide real-time web information. This is a two-step process: create the agent, then enable the Bing Grounding tool.
 
 ```powershell
-# First, create the basic agent
+# 1. Create the basic agent with appropriate instructions
 $researchAgent = New-MetroAIAgent -Model 'gpt-4o' -Name 'WebResearchAgent' `
    -Description 'Agent that can search the web for current information and provide research insights.' `
    -Instructions @"
@@ -269,12 +219,12 @@ You are a research assistant with access to current web information through Bing
 When users ask questions that require up-to-date information, use your web search capability to find relevant, recent information.
 Always cite your sources and indicate when information comes from web searches.
 Provide balanced, factual responses based on multiple sources when possible.
-"@ `
-   -Verbose
+"@
 
-# Then, update the agent to add Bing grounding capability
-# Use the full connection resource ID from your Azure AI Foundry project
-$bingConnectionId = "/subscriptions/{subscription-id}/resourceGroups/{resource-group-name}/providers/Microsoft.CognitiveServices/accounts/{cognitive-services-account}/projects/{project-name}/connections/{bing-connection-name}"
+# 2. Enable Bing grounding capability on the existing agent
+# You need the full connection resource ID from your Azure AI Foundry project
+$bingConnectionId = "/subscriptions/{sub-id}/resourceGroups/{rg-name}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}/connections/{connection-name}"
+
 Set-MetroAIAgent -AssistantId $researchAgent.id -EnableBingGrounding -BingConnectionId $bingConnectionId -Verbose
 ```
 
@@ -290,7 +240,7 @@ You can create agents that connect to MCP servers to extend their capabilities b
 
 ```powershell
 # Create an agent with a single MCP server
-New-MetroAIAgent -Model 'gpt-4o' -Name 'Microsoft Learn Agent' `
+New-MetroAIAgent -Model 'gpt-4o' -Name 'MicrosoftLearnAgent' `
     -EnableMcp -McpServerLabel 'Microsoft_Learn_MCP' `
     -McpServerUrl 'https://learn.microsoft.com/api/mcp' `
     -Description 'Agent with access to Microsoft Learn documentation through MCP server' `
@@ -300,6 +250,36 @@ When users ask questions about Microsoft technologies, Azure, or other Microsoft
 use your MCP server connection to search and retrieve relevant documentation.
 Always provide accurate, up-to-date information from official Microsoft sources.
 "@
+```
+
+#### Creating an Agent with Multiple MCP Servers
+
+For agents that need to access multiple external systems, you can configure multiple MCP servers:
+
+```powershell
+# Define multiple MCP server configurations
+$mcpServers = @(
+    @{
+        server_label = 'WeatherAPI'
+        server_url = 'https://weather.example.com/mcp'
+    },
+    @{
+        server_label = 'DatabaseAPI'
+        server_url = 'https://db.example.com/mcp'
+        allowed_tools = @('tool1','tool2') # Limit tool usage
+    },
+    @{
+        server_label = 'DocumentAPI'
+        server_url = 'https://docs.example.com/mcp'
+        allowed_tools = @('tool1','tool2') # Limit tool usage
+    }
+)
+
+# Create agent with multiple MCP servers
+New-MetroAIAgent -Model 'gpt-4o' -Name 'MultiServiceAgent' `
+    -McpServersConfiguration $mcpServers `
+    -Description 'Agent with access to weather, database, and document services' `
+    -Instructions "You are a multi-service agent. Use the available tools to answer user queries."
 ```
 
 #### Creating an Agent with Multiple MCP Servers
@@ -340,11 +320,50 @@ which external service you're consulting for their query.
 "@
 ```
 
+#### 🔑 Using MCP Servers with Authentication Headers
+
+Some MCP servers require authentication headers (like API keys) to access their resources. You can provide these headers securely when configuring the MCP server.
+
+**Single MCP Server with Headers:**
+
+```powershell
+# Define headers (e.g., API Key)
+$headers = @{
+    "Authorization" = "Bearer your-api-key-here"
+    "X-Custom-Header" = "custom-value"
+}
+
+# Create agent with MCP server and headers
+New-MetroAIAgent -Model 'gpt-4o' -Name 'SecureAgent' `
+    -EnableMcp -McpServerLabel 'SecureAPI' `
+    -McpServerUrl 'https://api.example.com/mcp' `
+    -McpServerHeaders $headers
+```
+
+**Multiple MCP Servers with Headers:**
+
+```powershell
+$mcpServers = @(
+    @{
+        server_label = 'ServiceA'
+        server_url = 'https://service-a.com/mcp'
+        headers = @{ "Authorization" = "Bearer key-a" }
+    },
+    @{
+        server_label = 'ServiceB'
+        server_url = 'https://service-b.com/mcp'
+        headers = @{ "X-API-Key" = "key-b" }
+    }
+)
+
+New-MetroAIAgent -Model 'gpt-4o' -Name 'MultiSecureAgent' -McpServersConfiguration $mcpServers
+```
+
 > **Note:** Approval behavior for MCP servers is now managed by Azure AI Foundry. The previous `require_approval` setting is ignored by the service and does not need to be specified.
 
-#### Adding MCP Server Support to Existing Agents
+#### ➕ Adding MCP Servers to Existing Agents
 
-You can add MCP server capabilities to existing agents without replacing their current tools:
+You can add MCP capabilities to existing agents without recreating them:
 
 ```powershell
 # Add a single MCP server to an existing agent
@@ -441,7 +460,7 @@ $regions = @{
 
 # Get master configuration from primary region (EastUS)
 Set-MetroAIContext -Endpoint $regions["EastUS"] -ApiType Agent
-$masterAgent = Get-MetroAIAgent -AssistantId "asst_master_123"
+$masterAgent = Get-MetroAIAgent -AssistantId "agent_master_123"
 $masterConfig = $masterAgent | ConvertTo-Json -Depth 10
 
 # Replicate to other regions
@@ -475,32 +494,23 @@ Set-MetroAIContext -Endpoint "https://your-ai-endpoint.ai.azure.com/api/projects
 # 2. Create a simple agent
 $agent = New-MetroAIAgent -Model 'gpt-4o' -Name 'Helper' -Instructions 'You are a helpful assistant.'
 
-# 3. Start a conversation
-$thread = New-MetroAIThread
-$message = Invoke-MetroAIMessage -ThreadID $thread.id -Message "Hello, how can you help me today?"
-$run = Start-MetroAIThreadRun -ThreadID $thread.id -AssistantId $agent.id
-
-# 4. Get the response
-Get-MetroAIMessage -ThreadID $thread.id
+# 3. Start a conversation (preview Responses API)
+$conv = New-MetroAIConversation
+$turn = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $conv.id -Input "Hello, how can you help me today?" -Verbose
+$turn.AssistantText
 ```
 
 </details>
 
 <details>
-<summary><strong>Agent with File Processing</strong></summary>
+<summary><strong>Agent with File Processing (Coming Soon)</strong></summary>
 
 ```powershell
-# Create an agent with code interpreter capabilities
-$codeAgent = New-MetroAIAgent -Model 'gpt-4o' -Name 'CodeAnalyzer' `
-    -EnableCodeInterpreter `
-    -Instructions 'You can analyze and execute code. Help users with programming tasks.'
-
-# Upload a file for analysis
-$uploadedFile = Add-MetroAIFile -FilePath "./data.csv" -Purpose "assistants"
-
-# Create agent with file search capabilities
-Set-MetroAIAgent -AssistantId $codeAgent.id -CodeInterpreterFileIds @($uploadedFile.id)
+# Upload a file (purpose value depends on service support; "assistants" is commonly accepted)
+Invoke-MetroAIUploadFile -FilePath "./data.csv" -Purpose "assistants"
 ```
+
+_Note: The Foundry Agents preview currently has limited support for file tooling. This feature will be fully enabled in future updates._
 
 </details>
 
@@ -544,16 +554,16 @@ Ensure data privacy and only access what's necessary for the user's request.
 
 Write-Output "Created comprehensive business agent: $($businessAgent.id)"
 
-# Example usage
-$businessThread = New-MetroAIThread
-$businessQuery = Invoke-MetroAIMessage -ThreadID $businessThread.id -Message @"
+# Example usage (conversation/response)
+$conv = New-MetroAIConversation
+$businessRequest = @"
 Please provide a business summary including:
 1. Current weather conditions for our main office locations
 2. This month's customer acquisition numbers
 3. A summary of the latest quarterly reports
 "@
-
-$businessRun = Start-MetroAIThreadRun -ThreadID $businessThread.id -AssistantId $businessAgent.id
+$businessTurn = Invoke-MetroAIConversation -AgentName $businessAgent.name -ConversationId $conv.id -Input $businessRequest
+$businessTurn.AssistantText
 ```
 
 </details>

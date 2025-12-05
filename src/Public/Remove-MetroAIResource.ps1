@@ -17,7 +17,7 @@ function Remove-MetroAIResource {
     #>
     [Alias("Remove-MetroAIAgent")]
     [Alias("Remove-MetroAIAssistant")]
-    [CmdletBinding(DefaultParameterSetName = 'All')]
+    [CmdletBinding(DefaultParameterSetName = 'All', SupportsShouldProcess = $true)]
     param (
         [Parameter(
             ParameterSetName = 'All',
@@ -52,7 +52,7 @@ function Remove-MetroAIResource {
         }
         foreach ($id in $idsToDelete) {
             try {
-                Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Path $id -Method Delete
+                Invoke-MetroAIApiCall -Service 'agents' -Operation 'delete' -Path $id -Method Delete
 
             }
             catch {

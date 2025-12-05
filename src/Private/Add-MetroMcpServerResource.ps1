@@ -25,8 +25,8 @@ function Add-MetroMcpServerResource {
         [ValidateNotNullOrEmpty()]
         [string]$ServerUrl,
 
-        [Parameter()]
-        [string]$RequireApproval
+        [Parameter(Mandatory = $false)]
+        [hashtable]$Headers
     )
 
     if (-not $ToolResources) {
@@ -42,9 +42,8 @@ function Add-MetroMcpServerResource {
             foreach ($key in $existing.Keys) {
                 $value = $existing[$key]
                 $entry = @{ server_label = $key }
-                if ($value -and $value.require_approval) {
-                    $entry.require_approval = $value.require_approval
-                }
+                if ($value -and $value.server_url) { $entry.server_url = $value.server_url }
+                if ($value -and $value.headers) { $entry.headers = $value.headers }
                 $mcpEntries += $entry
             }
         }
@@ -54,21 +53,26 @@ function Add-MetroMcpServerResource {
                 $label = $item.server_label
                 if (-not $label) { continue }
                 $entry = @{ server_label = $label }
-                if ($item.require_approval) { $entry.require_approval = $item.require_approval }
+                if ($item.server_url) { $entry.server_url = $item.server_url }
+                if ($item.headers) { $entry.headers = $item.headers }
                 $mcpEntries += $entry
             }
         }
         elseif ($existing.server_label) {
             $entry = @{ server_label = $existing.server_label }
-            if ($existing.require_approval) { $entry.require_approval = $existing.require_approval }
+            if ($existing.server_url) { $entry.server_url = $existing.server_url }
+            if ($existing.headers) { $entry.headers = $existing.headers }
             $mcpEntries += $entry
         }
     }
 
-    $newEntry = @{ server_label = $ServerLabel }
+    $newEntry = @{
+        server_label = $ServerLabel
+        server_url   = $ServerUrl
+    }
 
-    if ($RequireApproval) {
-        $newEntry.require_approval = $RequireApproval
+    if ($Headers) {
+        $newEntry.headers = $Headers
     }
 
     $existingIndex = $null

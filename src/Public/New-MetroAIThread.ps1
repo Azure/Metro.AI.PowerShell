@@ -9,7 +9,7 @@ function New-MetroAIThread {
     param (
     )
     try {
-        Invoke-MetroAIApiCall -Service 'threads' -Operation 'thread' -Method Post -ContentType "application/json"
+        throw "Threads are not supported in the Foundry Agents preview API. Use New-MetroAIConversation instead."
     }
     catch {
         Write-Error "New-MetroAIThread error: $_"

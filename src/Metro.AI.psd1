@@ -51,7 +51,13 @@
         'Start-MetroAIThreadWithMessages',
         'Add-MetroAIAgentOpenAPIDefinition',
         'Set-MetroAIContext',
-        'Get-MetroAIContext'
+        'Get-MetroAIContext',
+        'New-MetroAIConversation',
+        'Invoke-MetroAIConversation',
+        'Get-MetroAIConversation',
+        'Remove-MetroAIConversation',
+        'Get-MetroAIResponse',
+        'Remove-MetroAIResponse'
     )
 
     AliasesToExport   = @(

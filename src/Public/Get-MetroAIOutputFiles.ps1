@@ -15,31 +15,7 @@ function Get-MetroAIOutputFiles {
         [Parameter(Mandatory = $false, ParameterSetName = 'FileId')] [string]$LocalFilePath
     )
     try {
-        if ($PSBoundParameters['LocalFilePath'] -and -not $PSBoundParameters['FileId']) {
-            Write-Error "LocalFilePath can only be used with FileId."
-            break
-        }
-        $files = Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Method Get
-        if (-not [string]::IsNullOrWhiteSpace($FileId)) {
-            $item = $files.data | Where-Object { $_.id -eq $FileId -and $_.purpose -eq "assistants_output" }
-            if ($item) {
-                $content = Invoke-MetroAIApiCall -Service 'files' -Operation 'upload' -Path ("{0}/content" -f $FileId) -Method Get
-                if ($LocalFilePath) {
-                    $content | Out-File -FilePath $LocalFilePath -Force -Verbose
-                }
-                else {
-                    return $content
-                }
-            }
-            else {
-                Write-Error "File $FileId not found or wrong purpose."
-            }
-        }
-        else {
-            $outputFiles = $files.data | Where-Object { $_.purpose -eq "assistants_output" }
-            if ($outputFiles.Count -gt 0) { return $outputFiles }
-            else { Write-Output "No output files found." }
-        }
+        throw "Assistant output files are not supported in the Foundry Agents preview API."
     }
     catch {
         Write-Error "Get-MetroAIOutputFiles error: $_"

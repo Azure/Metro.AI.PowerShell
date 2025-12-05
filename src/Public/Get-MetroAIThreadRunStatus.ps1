@@ -15,7 +15,7 @@ function Get-MetroAIThreadRunStatus {
         [Parameter(Mandatory = $true)] [string]$RunID
     )
     try {
-        Invoke-MetroAIApiCall -Service 'threads' -Operation 'threadStatus' -Path ("{0}/runs/{1}" -f $ThreadID, $RunID) -Method Get
+        throw "Thread runs are not supported in the Foundry Agents preview API. Use Get-MetroAIConversation and Get-MetroAIResponse instead."
     }
     catch {
         Write-Error "Get-MetroAIThreadRunStatus error: $_"

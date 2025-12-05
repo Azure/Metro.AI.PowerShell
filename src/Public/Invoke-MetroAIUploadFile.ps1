@@ -12,7 +12,7 @@ function Invoke-MetroAIUploadFile {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)] [string]$FilePath,
-        [string]$Purpose = "assistants"
+        [string]$Purpose = "agents"
     )
     try {
         $fileItem = Get-Item -Path $FilePath -ErrorAction Stop
