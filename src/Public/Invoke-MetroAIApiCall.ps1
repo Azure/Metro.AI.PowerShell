@@ -32,9 +32,10 @@ function Invoke-MetroAIApiCall {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)] [string]$Service,
-        [Parameter(Mandatory = $true)] [string]$Operation,
-        [Parameter(Mandatory = $false)] [string]$Path,
+        [Parameter(Mandatory = $true, ParameterSetName = "Construct")] [string]$Service,
+        [Parameter(Mandatory = $true, ParameterSetName = "Construct")] [string]$Operation,
+        [Parameter(Mandatory = $false, ParameterSetName = "Construct")] [string]$Path,
+        [Parameter(Mandatory = $true, ParameterSetName = "Direct")] [string]$FullUri,
         [Parameter(Mandatory = $false)] [string]$Method = "Get",
         [Parameter(Mandatory = $false)] [object]$Body,
         [Parameter(Mandatory = $false)] [string]$ContentType,
@@ -57,7 +58,12 @@ function Invoke-MetroAIApiCall {
             }
         }
 
-        $uri = $script:MetroContext.ResolveUri($Service, $Operation, $Path, $UseOpenPrefix)
+        $uri = $null
+        if ($PSCmdlet.ParameterSetName -eq "Direct") {
+            $uri = $FullUri
+        } else {
+            $uri = $script:MetroContext.ResolveUri($Service, $Operation, $Path, $UseOpenPrefix)
+        }
 
         Write-Verbose "Calling API at URI: $uri with method $Method"
 

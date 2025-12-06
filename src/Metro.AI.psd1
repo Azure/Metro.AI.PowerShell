@@ -28,6 +28,9 @@
         }
     )
 
+    # List of all files packaged with this module that have a .ps1xml extension.
+    FormatsToProcess = @('Metro.AI.Format.ps1xml')
+
     # Functions to export from this module.
     FunctionsToExport = @(
         'Invoke-MetroAIUploadFile',

@@ -18,7 +18,9 @@ function Invoke-MetroAIConversation {
         [Alias('Input','Message','Prompt')]
         [object]$UserInput,
 
-        [switch]$PassThru
+        [switch]$PassThru,
+
+        [switch]$AutoApprove
     )
     try {
         if ($null -eq $UserInput) {
@@ -55,48 +57,106 @@ function Invoke-MetroAIConversation {
             }
         }
 
-        $body = @{
-            agent        = @{ type = 'agent_reference'; name = $AgentName }
-            conversation = $ConversationId
-            input        = $inputPayload
-        }
-
-        $response = Invoke-MetroAIApiCall -Service 'openai/responses' -Operation 'responses' -Method Post -ContentType "application/json" -Body $body
-
-        # Extract assistant text similar to prior helper shape
+        $currentInput = $inputPayload
         $assistantTextParts = @()
-        if ($response -and $response.PSObject.Properties.Name -contains "output") {
-            foreach ($outputItem in $response.output) {
-                if ($outputItem.type -eq "message" -and $outputItem.role -eq "assistant") {
-                    foreach ($contentPart in $outputItem.content) {
-                        if ($contentPart.type -eq "output_text" -and $contentPart.text) {
-                            $textValue = $null
-                            if ($contentPart.text -is [string]) {
-                                $textValue = $contentPart.text
-                            }
-                            elseif ($contentPart.text.PSObject.Properties.Name -contains "value") {
-                                $textValue = $contentPart.text.value
-                            }
-                            if ($textValue) {
-                                $assistantTextParts += $textValue
+        $lastResponse = $null
+        $keepGoing = $true
+
+        while ($keepGoing) {
+            $body = @{
+                agent        = @{ type = 'agent_reference'; name = $AgentName }
+                input        = $currentInput
+            }
+
+            if ($lastResponse -and $lastResponse.id) {
+                $body['previous_response_id'] = $lastResponse.id
+            }
+            else {
+                $body['conversation'] = $ConversationId
+            }
+
+            if ($PSBoundParameters['Verbose'] -or $VerbosePreference -ne 'SilentlyContinue') {
+                try {
+                    $jsonBody = $body | ConvertTo-Json -Depth 10 -Compress
+                    Write-Verbose "Request Body: $jsonBody"
+                } catch {
+                    Write-Verbose "Request Body: (Failed to serialize for logging)"
+                }
+            }
+
+            $response = Invoke-MetroAIApiCall -Service 'openai/responses' -Operation 'responses' -Method Post -ContentType "application/json" -Body $body
+            $lastResponse = $response
+
+            if (-not $response) {
+                throw "No response returned from the service."
+            }
+
+            $approvalRequests = @()
+
+            if ($response.PSObject.Properties.Name -contains "output") {
+                foreach ($outputItem in $response.output) {
+                    if ($outputItem.type -eq "message" -and $outputItem.role -eq "assistant") {
+                        foreach ($contentPart in $outputItem.content) {
+                            if ($contentPart.type -eq "output_text" -and $contentPart.text) {
+                                $textValue = $null
+                                if ($contentPart.text -is [string]) {
+                                    $textValue = $contentPart.text
+                                }
+                                elseif ($contentPart.text.PSObject.Properties.Name -contains "value") {
+                                    $textValue = $contentPart.text.value
+                                }
+                                if ($textValue) {
+                                    $assistantTextParts += $textValue
+                                }
                             }
                         }
                     }
+                    elseif ($outputItem.type -eq "mcp_approval_request") {
+                        $approvalRequests += $outputItem
+                    }
                 }
             }
-        }
 
-        if (-not $response) {
-            throw "No response returned from the service."
+            if ($approvalRequests.Count -gt 0) {
+                # Use a generic list to ensure ConvertTo-Json serializes as an array, even with a single item.
+                $nextInputItems = [System.Collections.Generic.List[object]]::new()
+                foreach ($req in $approvalRequests) {
+                    Write-Host "MCP Approval Request:" -ForegroundColor Yellow
+                    Write-Host "  Server: $($req.server_label)" -ForegroundColor Cyan
+                    Write-Host "  Tool:   $($req.name)" -ForegroundColor Cyan
+                    Write-Host "  Args:   $($req.arguments)" -ForegroundColor Cyan
+                    Write-Verbose "  Request ID: $($req.id)"
+                    
+                    $isApproved = $false
+                    if ($AutoApprove) {
+                        Write-Host "Auto-approving action due to -AutoApprove switch." -ForegroundColor Green
+                        $isApproved = $true
+                    }
+                    else {
+                        $userChoice = Read-Host "Do you approve this action? (y/n)"
+                        $isApproved = $userChoice -eq 'y'
+                    }
+                    
+                    $nextInputItems.Add(@{
+                        type = 'mcp_approval_response'
+                        approval_request_id = $req.id
+                        approve = $isApproved
+                    })
+                }
+                $currentInput = $nextInputItems
+            }
+            else {
+                $keepGoing = $false
+            }
         }
 
         $assistantText = ($assistantTextParts -join "`n")
 
         [PSCustomObject]@{
             AssistantText  = $assistantText
-            ResponseId     = $response.id
+            ResponseId     = $lastResponse.id
             ConversationId = $ConversationId
-            RawResponse    = $(if ($PassThru) { $response } else { $null })
+            RawResponse    = $(if ($PassThru) { $lastResponse } else { $null })
         }
     }
     catch {
