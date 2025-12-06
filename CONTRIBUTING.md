@@ -68,13 +68,12 @@ src/
     ├── Remove-MetroAIResource.ps1
     ├── Set-MetroAIResource.ps1
     ├── New-MetroAIFunction.ps1
-    ├── New-MetroAIThread.ps1
-    ├── Get-MetroAIThread.ps1
-    ├── Invoke-MetroAIMessage.ps1
-    ├── Start-MetroAIThreadRun.ps1
-    ├── Get-MetroAIThreadRunStatus.ps1
-    ├── Get-MetroAIMessage.ps1
-    ├── Start-MetroAIThreadWithMessages.ps1
+    ├── New-MetroAIConversation.ps1
+    ├── Get-MetroAIConversation.ps1
+    ├── Invoke-MetroAIConversation.ps1
+    ├── Remove-MetroAIConversation.ps1
+    ├── Get-MetroAIResponse.ps1
+    ├── Remove-MetroAIResponse.ps1
     └── Add-MetroAIAgentOpenAPIDefinition.ps1
 ```
 

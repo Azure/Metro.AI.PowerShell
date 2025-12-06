@@ -3,12 +3,13 @@ function Invoke-MetroAIConversation {
         .SYNOPSIS
             Sends a turn to an agent within a conversation using the Responses API.
         .EXAMPLE
-            Invoke-MetroAIConversation -AgentName "my-agent" -ConversationId "abc123" -Input "Hello"
+            Invoke-MetroAIConversation -AgentId "my-agent" -ConversationId "abc123" -Input "Hello"
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$AgentName,
+        [Alias('AgentName')]
+        [string]$AgentId,
 
         [Parameter(Mandatory = $true)]
         [string]$ConversationId,
@@ -64,7 +65,7 @@ function Invoke-MetroAIConversation {
 
         while ($keepGoing) {
             $body = @{
-                agent        = @{ type = 'agent_reference'; name = $AgentName }
+                agent        = @{ type = 'agent_reference'; name = $AgentId }
                 input        = $currentInput
             }
 

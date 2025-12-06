@@ -12,7 +12,7 @@ function New-MetroAIFunction {
         The required parameter name.
     .PARAMETER PropertyDescription
         A description for the required parameter.
-    .PARAMETER AssistantId
+    .PARAMETER AgentId
         The target agent or assistant ID.
     .PARAMETER Instructions
         The instructions for the function.
@@ -23,7 +23,9 @@ function New-MetroAIFunction {
         [Parameter(Mandatory = $true)] [string]$Description,
         [Parameter(Mandatory = $true)] [string]$RequiredPropertyName,
         [Parameter(Mandatory = $true)] [string]$PropertyDescription,
-        [Parameter(Mandatory = $true)] [string]$AssistantId,
+        [Parameter(Mandatory = $true)]
+        [Alias('AssistantId')]
+        [string]$AgentId,
         [Parameter(Mandatory = $true)] [string]$Instructions
     )
     try {

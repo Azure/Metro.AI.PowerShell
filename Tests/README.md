@@ -33,7 +33,7 @@ Tests/
 - **Coverage**:
   - Context management functions
   - Resource CRUD operations
-  - Thread management and messaging
+  - Conversation and Response handling
   - File upload and management
   - API integration functions
   - Alias functionality

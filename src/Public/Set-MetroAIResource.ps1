@@ -8,7 +8,7 @@ function Set-MetroAIResource {
         Can update from JSON file, specify individual parameters, or accept pipeline input from Get-MetroAIResource.
     .PARAMETER InputObject
         Pipeline input object from Get-MetroAIResource. When used, the object's properties are used for the update.
-    .PARAMETER AssistantId
+    .PARAMETER AgentId
         The ID of the agent/assistant resource to update.
     .PARAMETER InputFile
         Path to a JSON file containing the complete resource definition to update.
@@ -53,28 +53,28 @@ function Set-MetroAIResource {
     .PARAMETER McpServersConfiguration
         Array of MCP server configurations. Each must have 'server_label' and 'server_url'. The optional 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server. Any legacy 'require_approval' values are ignored by the API.
     .EXAMPLE
-        Set-MetroAIResource -AssistantId 'asst-123' -InputFile './updated-assistant.json'
+        Set-MetroAIResource -AgentId 'asst-123' -InputFile './updated-assistant.json'
     .EXAMPLE
-        Set-MetroAIResource -AssistantId 'asst-123' -EnableBingGrounding -BingConnectionId 'bing-conn-1'
+        Set-MetroAIResource -AgentId 'asst-123' -EnableBingGrounding -BingConnectionId 'bing-conn-1'
     .EXAMPLE
         # Add MCP server to existing assistant
-        Set-MetroAIResource -AssistantId 'asst-123' -AddMcp -McpServerLabel 'WeatherAPI' -McpServerUrl 'https://weather.example.com/mcp'
+        Set-MetroAIResource -AgentId 'asst-123' -AddMcp -McpServerLabel 'WeatherAPI' -McpServerUrl 'https://weather.example.com/mcp'
     .EXAMPLE
         # Replace all tools with MCP server only
-        Set-MetroAIResource -AssistantId 'asst-123' -ClearAllTools -EnableMcp -McpServerLabel 'DatabaseAPI' -McpServerUrl 'https://db.example.com/mcp'
+        Set-MetroAIResource -AgentId 'asst-123' -ClearAllTools -EnableMcp -McpServerLabel 'DatabaseAPI' -McpServerUrl 'https://db.example.com/mcp'
     .EXAMPLE
         # Add multiple MCP servers
         $mcpServers = @(
             @{ server_label = 'API1'; server_url = 'https://api1.example.com/mcp' },
             @{ server_label = 'API2'; server_url = 'https://api2.example.com/mcp' }
         )
-        Set-MetroAIResource -AssistantId 'asst-123' -McpServersConfiguration $mcpServers
+        Set-MetroAIResource -AgentId 'asst-123' -McpServersConfiguration $mcpServers
     .EXAMPLE
-        $Agent = Get-MetroAIAgent -AssistantId 'asst-123'
+        $Agent = Get-MetroAIAgent -AgentId 'asst-123'
         $Agent.Description = 'Updated description'
         $Agent | Set-MetroAIAgent
     .EXAMPLE
-        Get-MetroAIAgent -AssistantId 'asst-123' | Set-MetroAIAgent -Name 'Updated Name'
+        Get-MetroAIAgent -AgentId 'asst-123' | Set-MetroAIAgent -Name 'Updated Name'
     .NOTES
         When using InputFile or InputObject, individual parameters override properties from the input source.
     #>
@@ -88,7 +88,8 @@ function Set-MetroAIResource {
 
         [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
-        [string]$AssistantId,
+        [Alias('AssistantId', 'ResourceId')]
+        [string]$AgentId,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Json')]
         [ValidateScript({
@@ -229,7 +230,7 @@ function Set-MetroAIResource {
     )
 
     begin {
-        Write-Verbose "Starting Set-MetroAIResource for Assistant ID: $AssistantId"
+        Write-Verbose "Starting Set-MetroAIResource for Agent ID: $AgentId"
 
         # Ensure context is set
         if (-not $script:MetroContext) {
@@ -283,14 +284,14 @@ function Set-MetroAIResource {
                 }
 
                 # Extract assistant ID from JSON if present, otherwise use parameter
-                if ($PSBoundParameters['AssistantId']) {
-                    $targetAssistantId = $AssistantId
+                if ($PSBoundParameters['AgentId'] -or $PSBoundParameters['AssistantId'] -or $PSBoundParameters['ResourceId']) {
+                    $targetAssistantId = $AgentId
                 }
                 elseif ($requestBody.id) {
                     $targetAssistantId = $requestBody.id
                 }
                 else {
-                    throw "AssistantId must be provided either as a parameter or in the JSON file"
+                    throw "AgentId must be provided either as a parameter or in the JSON file"
                 }
 
                 # Clean up auto-generated properties
@@ -568,14 +569,14 @@ function Set-MetroAIResource {
 
                 # Get current resource to preserve existing configuration
                 try {
-                    $currentResource = Get-MetroAIResource -AssistantId $AssistantId -ErrorAction Stop
+                    $currentResource = Get-MetroAIResource -AgentId $AgentId -ErrorAction Stop
                     Write-Verbose "Retrieved current resource configuration"
                 }
                 catch {
-                    throw "Failed to retrieve current resource '$AssistantId': $($_.Exception.Message). Verify the ID exists and you have access."
+                    throw "Failed to retrieve current resource '$AgentId': $($_.Exception.Message). Verify the ID exists and you have access."
                 }
 
-                $targetAssistantId = $AssistantId
+                $targetAssistantId = $AgentId
                 $requestBody = @{}
                 $definition = @{}
                 

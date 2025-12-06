@@ -147,11 +147,11 @@ Start a conversation and send a turn using the preview Responses API:
 # Create a simple helper agent
 $agent = New-MetroAIAgent -Model 'gpt-4o' -Name 'Helper' -Instructions 'You are a helpful assistant.'
 
-# Create a new conversation thread
+# Create a new conversation
 $conv  = New-MetroAIConversation
 
 # Send a message to the agent within the conversation
-$turn  = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $conv.id -Input "Hello, how can you help me today?" -Verbose
+$turn  = Invoke-MetroAIConversation -AgentId $agent.id -ConversationId $conv.id -UserInput "Hello, how can you help me today?" -Verbose
 
 # Display the agent's response
 $turn.AssistantText
@@ -172,28 +172,28 @@ Remove-MetroAIConversation -ConversationId $conv.id -Confirm:$false
 Here is a complete example of a multi-turn conversation where the context is maintained across multiple messages:
 
 ```powershell
-# 1. Setup: Create an AI Expert agent and a conversation thread
+# 1. Setup: Create an AI Expert agent and a conversation
 $agent = New-MetroAIAgent -Model 'gpt-4o' -Name 'AIExpert' -Instructions 'You are an expert in Artificial Intelligence concepts. Explain complex topics simply.'
-$thread = New-MetroAIConversation
-Write-Host "Created thread: $($thread.id)"
+$conversation = New-MetroAIConversation
+Write-Host "Created conversation: $($conversation.id)"
 
 # 2. First Turn: Ask about Model Knowledge vs RAG
-$turn1 = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $thread.id -Input "What is the difference between a model's internal knowledge and RAG?"
+$turn1 = Invoke-MetroAIConversation -AgentId $agent.id -ConversationId $conversation.id -UserInput "What is the difference between a model's internal knowledge and RAG?"
 Write-Host "Agent: $($turn1.AssistantText)"
 # Output: Agent: Internal knowledge is what the model learned during training (static). RAG (Retrieval-Augmented Generation) allows the model to access external, up-to-date data at runtime.
 
 # 3. Second Turn: Follow up about Fine-tuning (context aware)
-$turn2 = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $thread.id -Input "How does fine-tuning fit into this picture?"
+$turn2 = Invoke-MetroAIConversation -AgentId $agent.id -ConversationId $conversation.id -UserInput "How does fine-tuning fit into this picture?"
 Write-Host "Agent: $($turn2.AssistantText)"
 # Output: Agent: Fine-tuning updates the model's weights to learn a specific style or domain language, whereas RAG provides facts. Fine-tuning changes *how* it talks; RAG changes *what* it knows.
 
 # 4. Third Turn: Ask about Prompt Engineering
-$turn3 = Invoke-MetroAIConversation -AgentName $agent.name -ConversationId $thread.id -Input "And where does prompt engineering come in?"
+$turn3 = Invoke-MetroAIConversation -AgentId $agent.id -ConversationId $conversation.id -UserInput "And where does prompt engineering come in?"
 Write-Host "Agent: $($turn3.AssistantText)"
 # Output: Agent: Prompt engineering is the art of crafting inputs to guide the model's behavior without changing its weights or external data. It's the most lightweight way to steer the model.
 
 # 5. Cleanup
-Remove-MetroAIConversation -ConversationId $thread.id -Confirm:$false
+Remove-MetroAIConversation -ConversationId $conversation.id -Confirm:$false
 ```
 
 ### Advanced Agent Orchestration (Coming Soon)

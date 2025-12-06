@@ -83,15 +83,7 @@ Always ask clarifying questions if the user's request is unclear.
             }
         }
 
-        # Sample thread data
-        SampleThread              = @{
-            messages = @(
-                @{
-                    role    = "user"
-                    content = "Hello, this is a test message"
-                }
-            )
-        }
+
 
         # Sample MCP server configurations for testing
         SampleMcpServers          = @(
@@ -147,7 +139,6 @@ Always ask clarifying questions if the user's request is unclear.
 
         # Resources created during tests (will be populated during test runs)
         CreatedResources = @()
-        CreatedThreads   = @()
         UploadedFiles    = @()
     }
 
@@ -175,15 +166,7 @@ function Add-TestResource {
     }
 }
 
-# Function to add created thread for cleanup
-function Add-TestThread {
-    param([string]$ThreadId)
 
-    $script:TestConfig.Cleanup.CreatedThreads += @{
-        Id        = $ThreadId
-        CreatedAt = Get-Date
-    }
-}
 
 # Function to add uploaded file for cleanup
 function Add-TestFile {
