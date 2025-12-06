@@ -88,7 +88,7 @@ function New-MetroAIResource {
         New-MetroAIResource -InputFile './existing-assistant.json'
     .EXAMPLE
         # Copy an existing agent with a new name
-        $Agent = Get-MetroAIAgent -AssistantId 'asst-123'
+        $Agent = Get-MetroAIAgent -AgentId 'asst-123'
         $Agent | New-MetroAIAgent -Name 'CopiedAgent'
     .EXAMPLE
         New-MetroAIResource -Model 'gpt-4.1' -Name 'CodeHelper' -EnableCodeInterpreter -CodeInterpreterFileIds @('file-123')
@@ -105,7 +105,7 @@ function New-MetroAIResource {
     .EXAMPLE
         # Create assistant, then add Bing grounding
         $assistant = New-MetroAIResource -Model 'gpt-4.1' -Name 'SearchBot'
-        Set-MetroAIResource -AssistantId $assistant.id -EnableBingGrounding -BingConnectionId 'bing-search-connection'
+        Set-MetroAIResource -AgentId $assistant.id -EnableBingGrounding -BingConnectionId 'bing-search-connection'
     .EXAMPLE
         # Multi-tool agent with various capabilities including MCP
         New-MetroAIResource -Model 'gpt-4.1' -Name 'MultiToolAgent' `
@@ -546,7 +546,7 @@ function New-MetroAIResource {
                     # Validate connected agent exists with detailed error handling
                     Write-Verbose "Validating connected agent: $ConnectedAgentId"
                     try {
-                        $connectedAgent = Get-MetroAIResource -AssistantId $ConnectedAgentId -ErrorAction Stop
+                        $connectedAgent = Get-MetroAIResource -AgentId $ConnectedAgentId -ErrorAction Stop
                         Write-Verbose "Connected agent '$($connectedAgent.name)' validated successfully"
                     }
                     catch {
@@ -558,7 +558,7 @@ function New-MetroAIResource {
                     Write-Verbose "Validating $($ConnectedAgentsDefinition.Count) connected agents"
                     foreach ($agent in $ConnectedAgentsDefinition) {
                         try {
-                            $connectedAgent = Get-MetroAIResource -AssistantId $agent.id -ErrorAction Stop
+                            $connectedAgent = Get-MetroAIResource -AgentId $agent.id -ErrorAction Stop
                             Write-Verbose "Connected agent '$($agent.name)' (ID: $($agent.id)) validated successfully"
                         }
                         catch {
@@ -856,7 +856,7 @@ function New-MetroAIResource {
                     # Find the existing agent by name (try direct GET first, then list fall-back)
                     $existing = $null
                     try {
-                        $existing = Get-MetroAIResource -AssistantId $Name
+                        $existing = Get-MetroAIResource -AgentId $Name
                     }
                     catch { }
                     if (-not $existing) {

@@ -1,12 +1,12 @@
 function Get-MetroMcpServerConfig {
     <#
     .SYNOPSIS
-        Retrieves MCP server configuration for the specified assistant.
+        Retrieves MCP server configuration for the specified agent.
     .DESCRIPTION
-        Reads the assistant definition and returns the MCP server entry that matches the provided label,
+        Reads the agent definition and returns the MCP server entry that matches the provided label,
         falling back to the single configured server when no label is supplied.
-    .PARAMETER AssistantId
-        The assistant (agent) identifier.
+    .PARAMETER AgentId
+        The agent identifier.
     .PARAMETER ServerLabel
         Optional label to select a specific MCP server. If omitted and exactly one server exists,
         that server is returned. An error is thrown when multiple servers exist and no label is supplied.
@@ -16,13 +16,14 @@ function Get-MetroMcpServerConfig {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [string]$AssistantId,
+        [Alias('AssistantId')]
+        [string]$AgentId,
 
         [Parameter(Mandatory = $false)]
         [string]$ServerLabel
     )
 
-    $resource = Get-MetroAIResource -AssistantId $AssistantId -ErrorAction Stop
+    $resource = Get-MetroAIResource -AgentId $AgentId -ErrorAction Stop
 
     $servers = @{}
 
@@ -102,7 +103,7 @@ function Get-MetroMcpServerConfig {
             $resolvedLabel = ($servers.Keys | Select-Object -First 1)
         }
         elseif ($servers.Count -gt 1) {
-            throw "Multiple MCP servers are configured for assistant '$AssistantId'. Specify -McpServerLabel or provide -McpToolOverrides."
+            throw "Multiple MCP servers are configured for agent '$AgentId'. Specify -McpServerLabel or provide -McpToolOverrides."
         }
     }
 

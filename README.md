@@ -86,7 +86,7 @@ You can create a new agent based on an existing one using PowerShell pipeline op
 
 ```powershell
 # Get an existing agent and create a copy with a new name
-$originalAgent = Get-MetroAIAgent -AssistantId "agent_abc123"
+$originalAgent = Get-MetroAIAgent -AgentId "agent_abc123"
 $copiedAgent = $originalAgent | New-MetroAIAgent -Name "CopiedAgent"
 
 # Copy with modifications - override specific properties while copying
@@ -104,7 +104,7 @@ You can modify an agent object and update it seamlessly:
 
 ```powershell
 # Get an agent, modify its properties locally, and then push the update
-$agent = Get-MetroAIAgent -AssistantId "agent_abc123"
+$agent = Get-MetroAIAgent -AgentId "agent_abc123"
 $agent.Description = "Updated description for better clarity"
 $agent.definition.instructions = @"
 You are an expert PowerShell assistant. Help users with PowerShell scripting,
@@ -117,7 +117,7 @@ $updatedAgent = $agent | Set-MetroAIAgent
 Write-Output "Updated agent: $($updatedAgent.name)"
 
 # You can also override specific properties directly via parameters during the update
-Get-MetroAIAgent -AssistantId "agent_abc123" | Set-MetroAIAgent -Name "NewName" -Temperature 0.5
+Get-MetroAIAgent -AgentId "agent_abc123" | Set-MetroAIAgent -Name "NewName" -Temperature 0.5
 ```
 
 ##### 📥📤 Exporting and Importing Agent Configurations
@@ -126,7 +126,7 @@ Export an agent configuration to JSON for backup, version control, or sharing:
 
 ```powershell
 # Export an existing agent to JSON file
-$agent = Get-MetroAIAgent -AssistantId "agent_abc123"
+$agent = Get-MetroAIAgent -AgentId "agent_abc123"
 $agent | ConvertTo-Json -Depth 100 | Out-File -FilePath "./my-agent-backup.json" -Encoding UTF8
 
 Write-Output "Agent configuration exported to my-agent-backup.json"
@@ -136,7 +136,7 @@ $newAgentFromFile = New-MetroAIAgent -InputFile "./my-agent-backup.json"
 Write-Output "Created agent from file: $($newAgentFromFile.name) with ID: $($newAgentFromFile.id)"
 
 # Update an existing agent from a JSON file
-Set-MetroAIAgent -AssistantId "agent_xyz789" -InputFile "./my-agent-backup.json"
+Set-MetroAIAgent -AgentId "agent_xyz789" -InputFile "./my-agent-backup.json"
 ```
 
 ### Conversation & Response Handling (Foundry Agents Preview)
@@ -225,7 +225,7 @@ Provide balanced, factual responses based on multiple sources when possible.
 # You need the full connection resource ID from your Azure AI Foundry project
 $bingConnectionId = "/subscriptions/{sub-id}/resourceGroups/{rg-name}/providers/Microsoft.CognitiveServices/accounts/{account}/projects/{project}/connections/{connection-name}"
 
-Set-MetroAIAgent -AssistantId $researchAgent.id -EnableBingGrounding -BingConnectionId $bingConnectionId -Verbose
+Set-MetroAIAgent -AgentId $researchAgent.id -EnableBingGrounding -BingConnectionId $bingConnectionId -Verbose
 ```
 
 ### MCP Server Integration
@@ -367,7 +367,7 @@ You can add MCP capabilities to existing agents without recreating them:
 
 ```powershell
 # Add a single MCP server to an existing agent
-Set-MetroAIAgent -AssistantId 'asst-123' -AddMcp `
+Set-MetroAIAgent -AgentId 'asst-123' -AddMcp `
     -McpServerLabel 'WeatherAPI' `
     -McpServerUrl 'https://weather.example.com/mcp'
 
@@ -383,7 +383,7 @@ $newMcpServers = @(
     }
 )
 
-Set-MetroAIAgent -AssistantId 'asst-456' -McpServersConfiguration $newMcpServers
+Set-MetroAIAgent -AgentId 'asst-456' -McpServersConfiguration $newMcpServers
 ```
 
 #### ➖ Removing MCP Server Integration
@@ -392,7 +392,7 @@ To remove MCP server capabilities from an agent:
 
 ```powershell
 # Remove all MCP servers while preserving other tools
-Set-MetroAIAgent -AssistantId 'asst-123' -RemoveMcp
+Set-MetroAIAgent -AgentId 'asst-123' -RemoveMcp
 ```
 
 ## 🔄 Advanced Workflows
@@ -460,7 +460,7 @@ $regions = @{
 
 # Get master configuration from primary region (EastUS)
 Set-MetroAIContext -Endpoint $regions["EastUS"] -ApiType Agent
-$masterAgent = Get-MetroAIAgent -AssistantId "agent_master_123"
+$masterAgent = Get-MetroAIAgent -AgentId "agent_master_123"
 $masterConfig = $masterAgent | ConvertTo-Json -Depth 10
 
 # Replicate to other regions

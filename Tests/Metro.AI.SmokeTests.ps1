@@ -113,7 +113,7 @@ Describe "Metro.AI PowerShell Module - Public Functions Smoke Tests" -Tags @("Sm
             }
 
             try {
-                $originalAgent = Get-MetroAIAgent -AssistantId $script:TestAgentId
+                $originalAgent = Get-MetroAIAgent -AgentId $script:TestAgentId
                 if ($originalAgent) {
                     $model = if ($originalAgent.model) { $originalAgent.model } elseif ($originalAgent.definition.model) { $originalAgent.definition.model } else { "gpt-4o" }
                     $instructions = if ($originalAgent.instructions) { $originalAgent.instructions } elseif ($originalAgent.definition.instructions) { $originalAgent.definition.instructions } else { "You are a helpful assistant." }
@@ -150,16 +150,16 @@ Describe "Metro.AI PowerShell Module - Public Functions Smoke Tests" -Tags @("Sm
             }
 
             try {
-                $agent = Get-MetroAIAgent -AssistantId $script:TestAgentId
+                $agent = Get-MetroAIAgent -AgentId $script:TestAgentId
                 if ($agent) {
                     $originalDescription = $agent.description
                     $newDescription = "Updated description for Pester test - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
                     
-                    $updatedAgent = Set-MetroAIAgent -AssistantId $script:TestAgentId -Description $newDescription
+                    $updatedAgent = Set-MetroAIAgent -AgentId $script:TestAgentId -Description $newDescription
                     $updatedAgent | Should -Not -BeNullOrEmpty
                     
                     # Re-fetch to verify update if response is incomplete
-                    $verifiedAgent = Get-MetroAIAgent -AssistantId $script:TestAgentId
+                    $verifiedAgent = Get-MetroAIAgent -AgentId $script:TestAgentId
                     $updatedDesc = if ($verifiedAgent.description) { $verifiedAgent.description } else { $verifiedAgent.definition.description }
                     
                     $updatedDesc | Should -Be $newDescription
@@ -189,7 +189,7 @@ Describe "Metro.AI PowerShell Module - Public Functions Smoke Tests" -Tags @("Sm
             }
 
             try {
-                $agent = Get-MetroAIAgent -AssistantId $script:TestAgentId
+                $agent = Get-MetroAIAgent -AgentId $script:TestAgentId
                 if ($agent) {
                     $jsonConfig = $agent | ConvertTo-Json -Depth 10
 
@@ -301,7 +301,7 @@ Always cite your sources and indicate when information comes from web searches.
 
                     # Try to enable Bing grounding (this might fail due to connection requirements)
                     try {
-                        Set-MetroAIAgent -AssistantId $researchAgent.id -EnableBingGrounding -BingConnectionId "test-connection"
+                        Set-MetroAIAgent -AgentId $researchAgent.id -EnableBingGrounding -BingConnectionId "test-connection"
                         Write-Host "✅ Successfully updated assistant with Bing grounding" -ForegroundColor Green
                     }
                     catch {
@@ -925,7 +925,7 @@ Always cite your sources and indicate when information comes from web searches.
 
                     # Create agent with file capabilities
                     if ($script:TestAgentId) {
-                        Set-MetroAIAgent -AssistantId $script:TestAgentId -CodeInterpreterFileIds @($uploadedFile.id)
+                        Set-MetroAIAgent -AgentId $script:TestAgentId -CodeInterpreterFileIds @($uploadedFile.id)
                         # Should not throw an error
                     }
                 }
@@ -983,7 +983,7 @@ Always cite your sources and indicate when information comes from web searches.
         $resourcesToCleanup = @($script:CreatedResources)
         foreach ($resourceId in $resourcesToCleanup) {
             try {
-                Remove-MetroAIResource -AssistantId $resourceId -ErrorAction SilentlyContinue
+                Remove-MetroAIResource -AgentId $resourceId -ErrorAction SilentlyContinue
                 Write-Verbose "Cleaned up resource: $resourceId"
             }
             catch {
