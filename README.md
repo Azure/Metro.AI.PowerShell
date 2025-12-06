@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Azure AI](https://img.shields.io/badge/Azure-AI%20Foundry-blue?logo=microsoft-azure)](https://azure.microsoft.com/en-us/products/ai-services/)
 
-Metro.AI is a powerful PowerShell module that simplifies working with **Azure AI Agent and Assistant APIs**. It provides a unified, intuitive command set to manage AI resources, upload files, start and monitor conversations, and integrate custom functions—all from your PowerShell console.
+Metro.AI is a powerful PowerShell module that simplifies working with **Microsoft Foundry AI Agents**. It provides a unified, intuitive command set to manage AI resources, upload files, start and monitor conversations, and integrate custom functions — all from your PowerShell console.
 
 ## 📋 Table of Contents
 
