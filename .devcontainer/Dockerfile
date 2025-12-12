@@ -7,7 +7,7 @@ RUN apt-get update \
     && curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && curl -Lo /usr/local/bin/bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64 \
     && chmod +x /usr/local/bin/bicep \
-    && pip3 install pre-commit \
+    && pip3 install pre-commit --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user setup
@@ -15,7 +15,9 @@ ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-RUN groupadd --gid $USER_GID $USERNAME \
+RUN if getent passwd $USER_UID; then userdel -f $(getent passwd $USER_UID | cut -d: -f1); fi \
+    && if getent group $USER_GID; then groupdel $(getent group $USER_GID | cut -d: -f1); fi \
+    && groupadd --gid $USER_GID $USERNAME \
     && useradd -s /bin/pwsh --uid $USER_UID --gid $USER_GID -m $USERNAME \
     && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
