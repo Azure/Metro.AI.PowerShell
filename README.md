@@ -282,29 +282,6 @@ New-MetroAIAgent -Model 'gpt-4o' -Name 'MultiServiceAgent' `
     -Instructions "You are a multi-service agent. Use the available tools to answer user queries."
 ```
 
-#### Creating an Agent with Multiple MCP Servers
-
-For agents that need to access multiple external systems, you can configure multiple MCP servers:
-
-```powershell
-# Define multiple MCP server configurations
-$mcpServers = @(
-    @{
-        server_label = 'WeatherAPI'
-        server_url = 'https://weather.example.com/mcp'
-    },
-    @{
-        server_label = 'DatabaseAPI'
-        server_url = 'https://db.example.com/mcp'
-        allowed_tools = @('tool1','tool2') # Limit tool usage
-    },
-    @{
-        server_label = 'DocumentAPI'
-        server_url = 'https://docs.example.com/mcp'
-        allowed_tools = @('tool1','tool2') # Limit tool usage
-    }
-)
-
 # Create agent with multiple MCP servers
 New-MetroAIAgent -Model 'gpt-4o' -Name 'MultiServiceAgent' `
     -McpServersConfiguration $mcpServers `
