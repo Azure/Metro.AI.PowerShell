@@ -684,6 +684,14 @@ function New-MetroAIResource {
                 if ($EnableCodeInterpreter) {
                     $tools.Add(@{ type = 'code_interpreter' })
                     Write-Verbose "Added code interpreter tool"
+                    # TODO: When Foundry Agents supports file_ids, restore the following logic:
+                    # $codeInterpreterTool = @{
+                    #     type = 'code_interpreter'
+                    # }
+                    # if ($CodeInterpreterFileIds) {
+                    #     $codeInterpreterTool.file_ids = $CodeInterpreterFileIds
+                    # }
+                    # $tools.Add($codeInterpreterTool)
                 }
 
                 # File Search Tool
