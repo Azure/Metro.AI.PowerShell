@@ -67,9 +67,9 @@ function Get-MetroAIResource {
                 # Base endpoint + /agents + api-version + after
                 # We assume the default api-version if not set in context
                 $ver = if ($script:MetroContext.ApiVersion) { $script:MetroContext.ApiVersion } else { '2025-11-15-preview' }
-                $nextUri = "$($script:MetroContext.Endpoint)/agents?api-version=$ver&after=$($currentResult.last_id)"
-                
-                $currentResult = Invoke-MetroAIApiCall -FullUri $nextUri -Method Get
+                # Use centralized URI resolution logic to construct the next page URI
+                $query = @{ 'api-version' = $ver; 'after' = $currentResult.last_id }
+                $currentResult = Invoke-MetroAIApiCall -Service 'agents' -Operation 'list' -Query $query -Method Get
             }
             else {
                 break
