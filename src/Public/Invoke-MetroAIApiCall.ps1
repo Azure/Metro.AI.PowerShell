@@ -117,7 +117,7 @@ function Invoke-MetroAIApiCall {
 
         if (-not ($statusCode -and $SuppressErrorCodes -contains $statusCode)) {
             Write-Error $message
+            throw
         }
-        throw
     }
 }
