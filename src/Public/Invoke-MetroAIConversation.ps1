@@ -16,7 +16,7 @@ function Invoke-MetroAIConversation {
 
         # Avoid conflict with PowerShell's automatic $input variable
         [Parameter(Mandatory = $true)]
-        [Alias('Input','Message','Prompt')]
+        [Alias('UserMessage','Message','Prompt')]
         [object]$UserInput,
 
         [switch]$PassThru,
