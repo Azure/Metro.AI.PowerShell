@@ -466,17 +466,9 @@ Always cite your sources and indicate when information comes from web searches.
             { Set-MetroAIContext -Endpoint $currentContext.Endpoint -ApiType $currentContext.ApiType } | Should -Not -Throw
         }
 
-        # It "Clear-MetroAIContextCache should execute without error" {
-        #     try {
-        #         Clear-MetroAIContextCache
-        #         $cache = Get-MetroAIContextCache
-        #         $cache | Should -BeNullOrEmpty
-        #         Write-Host "Metro AI context cache cleared" -ForegroundColor Yellow
-        #     }
-        #     catch {
-        #         $_.Exception.Message | Should -BeNullOrEmpty
-        #     }
-        # }
+        It "Clear-MetroAIContextCache should execute without error" {
+            Set-ItResult -Skipped -Because "Clear-MetroAIContextCache is deprecated or not available in the current API."
+        }
     }
 
     Context "Resource Management Functions" {
