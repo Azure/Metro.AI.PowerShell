@@ -83,7 +83,7 @@ function Add-MetroMcpServerResource {
         }
     }
 
-    if ($existingIndex -ne $null) {
+    if ($null -ne $existingIndex) {
         $mcpEntries[$existingIndex] = $newEntry
     }
     else {
