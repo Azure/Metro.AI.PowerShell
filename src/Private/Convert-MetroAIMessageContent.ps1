@@ -64,10 +64,10 @@ function Convert-MetroAIMessageContent {
             }
             default {
                 try {
-                    $segments += "[${($part.type)}] $($part | ConvertTo-Json -Depth 3)"
+                    $segments += "[$($part.type)] $($part | ConvertTo-Json -Depth 3)"
                 }
                 catch {
-                    $segments += "[${($part.type)}]"
+                    $segments += "[$($part.type)]"
                 }
             }
         }
