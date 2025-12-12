@@ -144,7 +144,6 @@ function New-MetroAIResource {
         [Parameter(ParameterSetName = 'InputObject')]
         [ValidateNotNullOrEmpty()]
         [ValidateLength(1, 256)]
-        [ValidatePattern('^[^ ]+$')]
         [Alias('ResourceName')]
         [string]$Name,
 
