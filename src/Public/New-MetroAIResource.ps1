@@ -854,14 +854,7 @@ function New-MetroAIResource {
                     $wasUpdated = $true
 
                     # Find the existing agent by name (try direct GET first, then list fall-back)
-                    $existing = $null
-                    try {
-                        $existing = Get-MetroAIResource -AgentId $Name
-                    }
-                    catch { }
-                    if (-not $existing) {
-                        $existing = Get-MetroAIResource | Where-Object { $_.name -eq $Name } | Select-Object -First 1
-                    }
+                    $existing = Get-MetroAIResource | Where-Object { $_.name -eq $Name } | Select-Object -First 1
                     if (-not $existing -or -not $existing.id) {
                         throw "Agent '$Name' already exists, but its ID could not be resolved."
                     }
