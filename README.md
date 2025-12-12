@@ -43,19 +43,10 @@ Connect-AzAccount
 
 Retrieve the connection string or project URI from your Azure AI Foundry project, then configure Metro.AI:
 
-#### 🆕 GA Version of AI Foundry
+#### 🆕 Setting AI context for interacting with your Foundry endpoint
 ```powershell
 # Example project URI (from GA version of foundry)
 Set-MetroAIContext -Endpoint https://aiservicesw3ba.services.ai.azure.com/api/projects/projectw3ba -ApiType Agent
-Get-MetroAIContext
-```
-
-#### 🔍 Preview Version of AI Foundry
-```powershell
-# Example project connection string (from preview version of foundry)
-$connectionString = "swedencentral.api.azureml.ms;80ffa654-da7f-4c46-8d9a-9ed75956766e;ai-foundry-workflows;admin-7818"
-
-Set-MetroAIContext -ConnectionString $connectionString -ApiType Agent
 Get-MetroAIContext
 ```
 
