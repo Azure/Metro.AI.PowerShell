@@ -855,7 +855,7 @@ function New-MetroAIResource {
                     # Find the existing agent by name (try direct GET first, then list fall-back)
                     $existing = Get-MetroAIResource | Where-Object { $_.name -eq $Name } | Select-Object -First 1
                     if (-not $existing -or -not $existing.id) {
-                        throw "Agent '$Name' already exists, but its ID could not be resolved."
+                        throw "A Metro AI agent with the name '$Name' already exists, but its ID could not be resolved. This may indicate a naming conflict or data inconsistency. Please run 'Get-MetroAIResource' to list existing agents and verify their names and IDs. Consider choosing a different name or resolving duplicate/conflicting agents before retrying."
                     }
 
                     $updateParams = @{
