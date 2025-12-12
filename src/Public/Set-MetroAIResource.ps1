@@ -8,7 +8,7 @@ function Set-MetroAIResource {
         Can update from JSON file, specify individual parameters, or accept pipeline input from Get-MetroAIResource.
     .PARAMETER InputObject
         Pipeline input object from Get-MetroAIResource. When used, the object's properties are used for the update.
-    .PARAMETER AssistantId
+    .PARAMETER AgentId
         The ID of the agent/assistant resource to update.
     .PARAMETER InputFile
         Path to a JSON file containing the complete resource definition to update.
@@ -45,37 +45,36 @@ function Set-MetroAIResource {
     .PARAMETER McpServerUrl
         URL of the MCP server endpoint. Must start with http:// or https://.
     .PARAMETER McpRequireApproval
-        Approval policy for MCP server actions: 'never', 'once', or 'always'. Default is 'never'.
+        (Deprecated) Previously controlled MCP server approval behavior. Retained for backward compatibility but ignored because the API no longer accepts approval settings.
     .PARAMETER AddMcp
         Switch to add MCP server to existing tools without replacing them.
     .PARAMETER RemoveMcp
         Switch to remove all MCP servers from existing tools.
     .PARAMETER McpServersConfiguration
-        Array of MCP server configurations. Each must have 'server_label', 'server_url', and optionally 'require_approval' and 'allowed_tools' properties.
-        The 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server.
+        Array of MCP server configurations. Each must have 'server_label' and 'server_url'. The optional 'allowed_tools' property should be an array of strings specifying which tools the agent can use from that MCP server. Any legacy 'require_approval' values are ignored by the API.
     .EXAMPLE
-        Set-MetroAIResource -AssistantId 'asst-123' -InputFile './updated-assistant.json'
+        Set-MetroAIResource -AgentId 'asst-123' -InputFile './updated-assistant.json'
     .EXAMPLE
-        Set-MetroAIResource -AssistantId 'asst-123' -EnableBingGrounding -BingConnectionId 'bing-conn-1'
+        Set-MetroAIResource -AgentId 'asst-123' -EnableBingGrounding -BingConnectionId 'bing-conn-1'
     .EXAMPLE
         # Add MCP server to existing assistant
-        Set-MetroAIResource -AssistantId 'asst-123' -AddMcp -McpServerLabel 'WeatherAPI' -McpServerUrl 'https://weather.example.com/mcp'
+        Set-MetroAIResource -AgentId 'asst-123' -AddMcp -McpServerLabel 'WeatherAPI' -McpServerUrl 'https://weather.example.com/mcp'
     .EXAMPLE
         # Replace all tools with MCP server only
-        Set-MetroAIResource -AssistantId 'asst-123' -ClearAllTools -EnableMcp -McpServerLabel 'DatabaseAPI' -McpServerUrl 'https://db.example.com/mcp' -McpRequireApproval 'once'
+        Set-MetroAIResource -AgentId 'asst-123' -ClearAllTools -EnableMcp -McpServerLabel 'DatabaseAPI' -McpServerUrl 'https://db.example.com/mcp'
     .EXAMPLE
         # Add multiple MCP servers
         $mcpServers = @(
-            @{ server_label = 'API1'; server_url = 'https://api1.example.com/mcp'; require_approval = 'never' },
-            @{ server_label = 'API2'; server_url = 'https://api2.example.com/mcp'; require_approval = 'always' }
+            @{ server_label = 'API1'; server_url = 'https://api1.example.com/mcp' },
+            @{ server_label = 'API2'; server_url = 'https://api2.example.com/mcp' }
         )
-        Set-MetroAIResource -AssistantId 'asst-123' -McpServersConfiguration $mcpServers
+        Set-MetroAIResource -AgentId 'asst-123' -McpServersConfiguration $mcpServers
     .EXAMPLE
-        $Agent = Get-MetroAIAgent -AssistantId 'asst-123'
+        $Agent = Get-MetroAIAgent -AgentId 'asst-123'
         $Agent.Description = 'Updated description'
         $Agent | Set-MetroAIAgent
     .EXAMPLE
-        Get-MetroAIAgent -AssistantId 'asst-123' | Set-MetroAIAgent -Name 'Updated Name'
+        Get-MetroAIAgent -AgentId 'asst-123' | Set-MetroAIAgent -Name 'Updated Name'
     .NOTES
         When using InputFile or InputObject, individual parameters override properties from the input source.
     #>
@@ -89,7 +88,8 @@ function Set-MetroAIResource {
 
         [Parameter(Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
-        [string]$AssistantId,
+        [Alias('AssistantId', 'ResourceId')]
+        [string]$AgentId,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'Json')]
         [ValidateScript({
@@ -108,6 +108,7 @@ function Set-MetroAIResource {
         [Parameter(ParameterSetName = 'Parameters')]
         [Parameter(ParameterSetName = 'InputObject')]
         [ValidateLength(1, 256)]
+        [ValidatePattern('^[^ ]+$')]
         [string]$Name,
 
         [Parameter(ParameterSetName = 'Parameters')]
@@ -196,8 +197,11 @@ function Set-MetroAIResource {
 
         [Parameter(ParameterSetName = 'Parameters')]
         [Parameter(ParameterSetName = 'InputObject')]
-        [ValidateSet('never', 'once', 'always')]
-        [string]$McpRequireApproval = 'never',
+        [hashtable]$McpServerHeaders,
+
+        [Parameter(ParameterSetName = 'Parameters')]
+        [Parameter(ParameterSetName = 'InputObject')]
+        [string]$McpRequireApproval,
 
         [Parameter(ParameterSetName = 'Parameters')]
         [Parameter(ParameterSetName = 'InputObject')]
@@ -216,9 +220,6 @@ function Set-MetroAIResource {
                     }
                     if ($server.server_label.Length -gt 256) { throw "MCP server label exceeds 256 characters" }
                     if ($server.server_url -notmatch '^https?://') { throw "MCP server URL must start with http:// or https://" }
-                    if ($server.require_approval -and $server.require_approval -notin @('never', 'once', 'always')) {
-                        throw "MCP server require_approval must be 'never', 'once', or 'always'"
-                    }
                     if ($server.allowed_tools -and $server.allowed_tools -isnot [array]) {
                         throw "MCP server allowed_tools must be an array of strings"
                     }
@@ -229,7 +230,7 @@ function Set-MetroAIResource {
     )
 
     begin {
-        Write-Verbose "Starting Set-MetroAIResource for Assistant ID: $AssistantId"
+        Write-Verbose "Starting Set-MetroAIResource for Agent ID: $AgentId"
 
         # Ensure context is set
         if (-not $script:MetroContext) {
@@ -266,6 +267,10 @@ function Set-MetroAIResource {
                 throw "McpServerLabel and McpServerUrl are required when using -EnableMcp or -AddMcp."
             }
 
+            if ($PSBoundParameters.ContainsKey('McpRequireApproval') -and $McpRequireApproval) {
+                Write-Warning "The 'McpRequireApproval' parameter is ignored. The API no longer accepts approval settings for MCP servers."
+            }
+
             if ($PSCmdlet.ParameterSetName -eq 'Json') {
                 # Handle JSON file input
                 Write-Verbose "Processing input file: $InputFile"
@@ -279,20 +284,35 @@ function Set-MetroAIResource {
                 }
 
                 # Extract assistant ID from JSON if present, otherwise use parameter
-                if ($PSBoundParameters['AssistantId']) {
-                    $targetAssistantId = $AssistantId
+                if ($PSBoundParameters['AgentId'] -or $PSBoundParameters['AssistantId'] -or $PSBoundParameters['ResourceId']) {
+                    $targetAgentId = $AgentId
                 }
                 elseif ($requestBody.id) {
-                    $targetAssistantId = $requestBody.id
+                    $targetAgentId = $requestBody.id
                 }
                 else {
-                    throw "AssistantId must be provided either as a parameter or in the JSON file"
+                    throw "AgentId must be provided either as a parameter or in the JSON file"
                 }
 
                 # Clean up auto-generated properties
                 $requestBody = Remove-MetroAIAutoGeneratedProperties -InputObject $requestBody
 
-                $confirmMessage = "Update assistant '$targetAssistantId' from file '$InputFile'"
+                # Handle versions structure if present
+                if ($requestBody.versions -and $requestBody.versions.latest -and $requestBody.versions.latest.definition) {
+                    $definition = $requestBody.versions.latest.definition
+                    # Move definition to root for the update payload
+                    if (-not $requestBody.PSObject.Properties.Match('definition').Count) {
+                        $requestBody | Add-Member -MemberType NoteProperty -Name "definition" -Value $definition -Force
+                    } else {
+                        $requestBody.definition = $definition
+                    }
+                    # Remove versions property as we've extracted what we need
+                    if ($requestBody.PSObject.Properties.Match('versions').Count) {
+                        $requestBody.PSObject.Properties.Remove('versions')
+                    }
+                }
+
+                $confirmMessage = "Update agent '$targetAgentId' from file '$InputFile'"
             }
             elseif ($PSCmdlet.ParameterSetName -eq 'InputObject') {
                 # Handle pipeline input from Get-MetroAIResource
@@ -302,45 +322,121 @@ function Set-MetroAIResource {
                     throw "Input object must have an 'id' property"
                 }
 
-                $targetAssistantId = $InputObject.id
+                $targetAgentId = $InputObject.id
 
                 # Clean up auto-generated properties and convert to manageable object
                 $requestBody = Remove-MetroAIAutoGeneratedProperties -InputObject $InputObject | ConvertTo-Json -Depth 100 | ConvertFrom-Json
 
+                # Handle versions structure if present
+                if ($requestBody.versions -and $requestBody.versions.latest -and $requestBody.versions.latest.definition) {
+                    $definition = $requestBody.versions.latest.definition
+                    # Move definition to root for the update payload
+                    if (-not $requestBody.PSObject.Properties.Match('definition').Count) {
+                        $requestBody | Add-Member -MemberType NoteProperty -Name "definition" -Value $definition -Force
+                    } else {
+                        $requestBody.definition = $definition
+                    }
+                    # Remove versions property as we've extracted what we need
+                    if ($requestBody.PSObject.Properties.Match('versions').Count) {
+                        $requestBody.PSObject.Properties.Remove('versions')
+                    }
+                }
+                # Ensure definition object exists
+                elseif (-not $requestBody.PSObject.Properties.Match('definition').Count) {
+                    $requestBody | Add-Member -MemberType NoteProperty -Name "definition" -Value @{} -Force
+                    $definition = $requestBody.definition
+                } else {
+                    $definition = $requestBody.definition
+                }
+
                 # Override with any explicitly provided parameters
-                if ($PSBoundParameters.ContainsKey('Model')) { $requestBody.model = $Model }
-                if ($PSBoundParameters.ContainsKey('Name')) { $requestBody.name = $Name }
-                if ($PSBoundParameters.ContainsKey('Description')) { $requestBody.description = $Description }
-                if ($PSBoundParameters.ContainsKey('Instructions')) { $requestBody.instructions = $Instructions }
-                if ($PSBoundParameters.ContainsKey('Metadata')) { $requestBody.metadata = $Metadata }
-                if ($PSBoundParameters.ContainsKey('ResponseFormat')) { $requestBody.response_format = $ResponseFormat }
-                if ($PSBoundParameters.ContainsKey('Temperature')) { $requestBody.temperature = $Temperature }
-                if ($PSBoundParameters.ContainsKey('TopP')) { $requestBody.top_p = $TopP }
+                if ($PSBoundParameters.ContainsKey('Model')) {
+                    if ($definition.PSObject.Properties.Match('model').Count) {
+                        $definition.model = $Model
+                    } else {
+                        $definition | Add-Member -MemberType NoteProperty -Name "model" -Value $Model -Force
+                    }
+                }
+                if ($PSBoundParameters.ContainsKey('Name')) {
+                    if ($requestBody.PSObject.Properties.Match('name').Count) {
+                        $requestBody.name = $Name
+                    } else {
+                        $requestBody | Add-Member -MemberType NoteProperty -Name "name" -Value $Name -Force
+                    }
+                }
+                if ($PSBoundParameters.ContainsKey('Description')) {
+                    if ($requestBody.PSObject.Properties.Match('description').Count) {
+                        $requestBody.description = $Description
+                    } else {
+                        $requestBody | Add-Member -MemberType NoteProperty -Name "description" -Value $Description -Force
+                    }
+                }
+                if ($PSBoundParameters.ContainsKey('Instructions')) {
+                    if ($definition.PSObject.Properties.Match('instructions').Count) {
+                        $definition.instructions = $Instructions
+                    } else {
+                        $definition | Add-Member -MemberType NoteProperty -Name "instructions" -Value $Instructions -Force
+                    }
+                }
+                if ($PSBoundParameters.ContainsKey('Metadata')) {
+                    if ($requestBody.PSObject.Properties.Match('metadata').Count) {
+                        $requestBody.metadata = $Metadata
+                    } else {
+                        $requestBody | Add-Member -MemberType NoteProperty -Name "metadata" -Value $Metadata -Force
+                    }
+                }
+                if ($PSBoundParameters.ContainsKey('ResponseFormat')) {
+                    if ($definition.PSObject.Properties.Match('response_format').Count) {
+                        $definition.response_format = $ResponseFormat
+                    } else {
+                        $definition | Add-Member -MemberType NoteProperty -Name "response_format" -Value $ResponseFormat -Force
+                    }
+                }
+                if ($PSBoundParameters.ContainsKey('Temperature')) {
+                    if ($definition.PSObject.Properties.Match('temperature').Count) {
+                        $definition.temperature = $Temperature
+                    } else {
+                        $definition | Add-Member -MemberType NoteProperty -Name "temperature" -Value $Temperature -Force
+                    }
+                }
+                if ($PSBoundParameters.ContainsKey('TopP')) {
+                    if ($definition.PSObject.Properties.Match('top_p').Count) {
+                        $definition.top_p = $TopP
+                    } else {
+                        $definition | Add-Member -MemberType NoteProperty -Name "top_p" -Value $TopP -Force
+                    }
+                }
+
+                # Normalize tool_resources for pipeline input
+                $toolResourcesHash = @{}
+                if ($definition.tool_resources) {
+                    $definition.tool_resources.PSObject.Properties | ForEach-Object {
+                        $toolResourcesHash[$_.Name] = $_.Value
+                    }
+                }
+                
+                # Ensure definition has tool_resources property
+                if (-not $definition.PSObject.Properties.Match('tool_resources').Count) {
+                     $definition | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value $toolResourcesHash -Force
+                } else {
+                     $definition.tool_resources = $toolResourcesHash
+                }
 
                 # Handle Code Interpreter configuration for pipeline input
                 if ($EnableCodeInterpreter -or $CodeInterpreterFileIds) {
                     # Get existing file IDs from current resource
                     $existingFileIds = @()
-                    if ($requestBody.tool_resources -and $requestBody.tool_resources.code_interpreter -and $requestBody.tool_resources.code_interpreter.file_ids) {
-                        $existingFileIds = $requestBody.tool_resources.code_interpreter.file_ids
+                    if ($toolResourcesHash.code_interpreter -and $toolResourcesHash.code_interpreter.file_ids) {
+                        $existingFileIds = $toolResourcesHash.code_interpreter.file_ids
                     }
-
-                    # Convert tool_resources to hashtable if it doesn't exist or recreate it
-                    $toolResourcesHash = @{}
-                    if ($requestBody.tool_resources) {
-                        # Convert existing tool_resources to hashtable
-                        $requestBody.tool_resources.PSObject.Properties | ForEach-Object {
-                            $toolResourcesHash[$_.Name] = $_.Value
-                        }
-                    }
-                    $requestBody | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value $toolResourcesHash -Force
 
                     # Use helper function to configure Code Interpreter
-                    Set-CodeInterpreterConfiguration -RequestBody $requestBody -ExistingFileIds $existingFileIds -NewFileIds $CodeInterpreterFileIds -EnableCodeInterpreter:$EnableCodeInterpreter
+                    # Pass $definition as RequestBody because it contains tool_resources
+                    Set-CodeInterpreterConfiguration -RequestBody $definition -ExistingFileIds $existingFileIds -NewFileIds $CodeInterpreterFileIds -EnableCodeInterpreter:$EnableCodeInterpreter
                 }
 
                 # Handle tools configuration for pipeline input
-                $currentTools = if ($requestBody.tools) { $requestBody.tools } else { @() }
+                $currentTools = if ($definition.tools) { $definition.tools } else { @() }
                 $newTools = [System.Collections.Generic.List[object]]::new()
 
                 if ($ClearAllTools) {
@@ -401,12 +497,12 @@ function Set-MetroAIResource {
                     Write-Verbose "Adding MCP server tool: $McpServerLabel at $McpServerUrl"
 
                     $mcpTool = @{
-                        type             = 'mcp'
-                        server_label     = $McpServerLabel
-                        server_url       = $McpServerUrl
-                        require_approval = $McpRequireApproval
+                        type         = 'mcp'
+                        server_label = $McpServerLabel
+                        server_url   = $McpServerUrl
                     }
                     $newTools.Add($mcpTool)
+                    $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $McpServerLabel -ServerUrl $McpServerUrl -Headers $McpServerHeaders
                     Write-Verbose "Added MCP server tool: $McpServerLabel"
                 }
 
@@ -414,11 +510,15 @@ function Set-MetroAIResource {
                 if ($McpServersConfiguration) {
                     Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
                     foreach ($server in $McpServersConfiguration) {
+                        $serverProperties = if ($server -is [hashtable]) { $server.Keys } else { $server.PSObject.Properties.Name }
+                        if ($serverProperties -contains 'require_approval' -and $server.require_approval) {
+                            Write-Warning "MCP server configuration '$($server.server_label)' includes 'require_approval', which is ignored by the API."
+                        }
+
                         $mcpTool = @{
-                            type             = 'mcp'
-                            server_label     = $server.server_label
-                            server_url       = $server.server_url
-                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                            type         = 'mcp'
+                            server_label = $server.server_label
+                            server_url   = $server.server_url
                         }
                         
                         # Add allowed_tools if specified
@@ -428,12 +528,20 @@ function Set-MetroAIResource {
                         }
                         
                         $newTools.Add($mcpTool)
+                        $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $server.server_label -ServerUrl $server.server_url -Headers $server.headers
                         Write-Verbose "Added MCP server tool: $($server.server_label)"
                     }
                 }
 
-                # Set tools in request body
-                $requestBody.tools = $newTools.ToArray()
+                # Set tools in definition
+                if ($definition.PSObject.Properties.Match('tools').Count) {
+                    $definition.tools = $newTools.ToArray()
+                } else {
+                    $definition | Add-Member -MemberType NoteProperty -Name "tools" -Value $newTools.ToArray() -Force
+                }
+
+                # Update tool_resources with MCP server definitions
+                $definition.tool_resources = $toolResourcesHash
 
                 # Build confirmation message
                 $changes = @()
@@ -450,7 +558,7 @@ function Set-MetroAIResource {
                 if ($McpServersConfiguration) { $changes += "add multiple MCP servers" }
                 if ($ClearAllTools) { $changes += "clear all tools" }
 
-                $confirmMessage = "Update assistant '$targetAssistantId' from pipeline input"
+                $confirmMessage = "Update agent '$targetAgentId' from pipeline input"
                 if ($changes.Count -gt 0) {
                     $confirmMessage += " with changes: $($changes -join ', ')"
                 }
@@ -461,29 +569,58 @@ function Set-MetroAIResource {
 
                 # Get current resource to preserve existing configuration
                 try {
-                    $currentResource = Get-MetroAIResource -AssistantId $AssistantId -ErrorAction Stop
+                    $currentResource = Get-MetroAIResource -AgentId $AgentId -ErrorAction Stop
                     Write-Verbose "Retrieved current resource configuration"
                 }
                 catch {
-                    throw "Failed to retrieve current resource '$AssistantId': $($_.Exception.Message). Verify the ID exists and you have access."
+                    throw "Failed to retrieve current resource '$AgentId': $($_.Exception.Message). Verify the ID exists and you have access."
                 }
 
-                $targetAssistantId = $AssistantId
+                $targetAgentId = $AgentId
                 $requestBody = @{}
+                $definition = @{}
+                
+                # Handle legacy vs new structure for current resource
+                if ($currentResource.versions -and $currentResource.versions.latest -and $currentResource.versions.latest.definition) {
+                    $currentDefinition = $currentResource.versions.latest.definition
+                } elseif ($currentResource.definition) {
+                    $currentDefinition = $currentResource.definition
+                } else {
+                    $currentDefinition = $currentResource
+                }
 
                 # Preserve existing values and update only specified parameters
-                if ($Model) { $requestBody.model = $Model } else { $requestBody.model = $currentResource.model }
+                # Root properties
                 if ($Name) { $requestBody.name = $Name } else { $requestBody.name = $currentResource.name }
                 if ($PSBoundParameters.ContainsKey('Description')) { $requestBody.description = $Description } elseif ($currentResource.description) { $requestBody.description = $currentResource.description }
-                if ($PSBoundParameters.ContainsKey('Instructions')) { $requestBody.instructions = $Instructions } elseif ($currentResource.instructions) { $requestBody.instructions = $currentResource.instructions }
                 if ($PSBoundParameters.ContainsKey('Metadata')) { $requestBody.metadata = $Metadata } elseif ($currentResource.metadata) { $requestBody.metadata = $currentResource.metadata }
-                if ($PSBoundParameters.ContainsKey('ResponseFormat')) { $requestBody.response_format = $ResponseFormat } elseif ($currentResource.response_format) { $requestBody.response_format = $currentResource.response_format }
-                if ($PSBoundParameters.ContainsKey('Temperature')) { $requestBody.temperature = $Temperature } elseif ($null -ne $currentResource.temperature) { $requestBody.temperature = $currentResource.temperature }
-                if ($PSBoundParameters.ContainsKey('TopP')) { $requestBody.top_p = $TopP } elseif ($null -ne $currentResource.top_p) { $requestBody.top_p = $currentResource.top_p }
+
+                # Definition properties
+                if ($currentDefinition.kind) { $definition.kind = $currentDefinition.kind }
+                if ($Model) { $definition.model = $Model } elseif ($currentDefinition.model) { $definition.model = $currentDefinition.model }
+                if ($PSBoundParameters.ContainsKey('Instructions')) { $definition.instructions = $Instructions } elseif ($currentDefinition.instructions) { $definition.instructions = $currentDefinition.instructions }
+                if ($PSBoundParameters.ContainsKey('ResponseFormat')) { $definition.response_format = $ResponseFormat } elseif ($currentDefinition.response_format) { $definition.response_format = $currentDefinition.response_format }
+                if ($PSBoundParameters.ContainsKey('Temperature')) { $definition.temperature = $Temperature } elseif ($null -ne $currentDefinition.temperature) { $definition.temperature = $currentDefinition.temperature }
+                if ($PSBoundParameters.ContainsKey('TopP')) { $definition.top_p = $TopP } elseif ($null -ne $currentDefinition.top_p) { $definition.top_p = $currentDefinition.top_p }
 
                 # Handle tools configuration
-                $currentTools = if ($currentResource.tools) { $currentResource.tools } else { @() }
+                $currentTools = if ($currentDefinition.tools) { $currentDefinition.tools } else { @() }
                 $newTools = [System.Collections.Generic.List[object]]::new()
+
+                # Prepare tool_resources baseline
+                $toolResourcesHash = @{}
+                if ($currentDefinition.tool_resources) {
+                    $currentDefinition.tool_resources.PSObject.Properties | ForEach-Object {
+                        $toolResourcesHash[$_.Name] = $_.Value
+                    }
+                }
+                
+                # Ensure definition has tool_resources property for helper functions
+                if (-not $definition.PSObject.Properties.Match('tool_resources').Count) {
+                     $definition | Add-Member -MemberType NoteProperty -Name "tool_resources" -Value $toolResourcesHash -Force
+                } else {
+                     $definition.tool_resources = $toolResourcesHash
+                }
 
                 if ($ClearAllTools) {
                     Write-Verbose "Clearing all existing tools"
@@ -543,12 +680,12 @@ function Set-MetroAIResource {
                     Write-Verbose "Adding MCP server tool: $McpServerLabel at $McpServerUrl"
 
                     $mcpTool = @{
-                        type             = 'mcp'
-                        server_label     = $McpServerLabel
-                        server_url       = $McpServerUrl
-                        require_approval = $McpRequireApproval
+                        type         = 'mcp'
+                        server_label = $McpServerLabel
+                        server_url   = $McpServerUrl
                     }
                     $newTools.Add($mcpTool)
+                    $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $McpServerLabel -ServerUrl $McpServerUrl -Headers $McpServerHeaders
                     Write-Verbose "Added MCP server tool: $McpServerLabel"
                 }
 
@@ -556,11 +693,15 @@ function Set-MetroAIResource {
                 if ($McpServersConfiguration) {
                     Write-Verbose "Adding $($McpServersConfiguration.Count) MCP server configurations"
                     foreach ($server in $McpServersConfiguration) {
+                        $serverProperties = if ($server -is [hashtable]) { $server.Keys } else { $server.PSObject.Properties.Name }
+                        if ($serverProperties -contains 'require_approval' -and $server.require_approval) {
+                            Write-Warning "MCP server configuration '$($server.server_label)' includes 'require_approval', which is ignored by the API."
+                        }
+
                         $mcpTool = @{
-                            type             = 'mcp'
-                            server_label     = $server.server_label
-                            server_url       = $server.server_url
-                            require_approval = if ($server.require_approval) { $server.require_approval } else { 'never' }
+                            type         = 'mcp'
+                            server_label = $server.server_label
+                            server_url   = $server.server_url
                         }
                         
                         # Add allowed_tools if specified
@@ -570,40 +711,36 @@ function Set-MetroAIResource {
                         }
                         
                         $newTools.Add($mcpTool)
+                        $toolResourcesHash = Add-MetroMcpServerResource -ToolResources $toolResourcesHash -ServerLabel $server.server_label -ServerUrl $server.server_url -Headers $server.headers
                         Write-Verbose "Added MCP server tool: $($server.server_label)"
                     }
                 }
 
-                # Set tools in request body
-                $requestBody.tools = $newTools.ToArray()
-
-                # Handle tool_resources properly by converting to hashtable
-                $toolResourcesHash = @{}
-                if ($currentResource.tool_resources) {
-                    # Convert existing tool_resources to hashtable
-                    $currentResource.tool_resources.PSObject.Properties | ForEach-Object {
-                        $toolResourcesHash[$_.Name] = $_.Value
-                    }
-                }
-                $requestBody.tool_resources = $toolResourcesHash
+                # Set tools in definition
+                $definition.tools = $newTools.ToArray()
+                $definition.tool_resources = $toolResourcesHash
+                
+                # Assign definition to request body
+                $requestBody.definition = $definition
 
                 # Handle Code Interpreter configuration for parameter-based updates
                 if ($EnableCodeInterpreter -or $CodeInterpreterFileIds) {
                     # Get existing file IDs from current resource
                     $existingFileIds = @()
-                    if ($currentResource.tool_resources -and $currentResource.tool_resources.code_interpreter -and $currentResource.tool_resources.code_interpreter.file_ids) {
-                        $existingFileIds = $currentResource.tool_resources.code_interpreter.file_ids
+                    if ($toolResourcesHash.code_interpreter -and $toolResourcesHash.code_interpreter.file_ids) {
+                        $existingFileIds = $toolResourcesHash.code_interpreter.file_ids
                     }
 
                     # Use helper function to configure Code Interpreter
-                    Set-CodeInterpreterConfiguration -RequestBody $requestBody -ExistingFileIds $existingFileIds -NewFileIds $CodeInterpreterFileIds -EnableCodeInterpreter:$EnableCodeInterpreter
+                    # Pass $definition as RequestBody because it contains tool_resources
+                    Set-CodeInterpreterConfiguration -RequestBody $definition -ExistingFileIds $existingFileIds -NewFileIds $CodeInterpreterFileIds -EnableCodeInterpreter:$EnableCodeInterpreter
                 }
 
                 # Build confirmation message
-                $confirmMessage = "Update assistant '$AssistantId'"
+                $confirmMessage = "Update agent '$AgentId'"
                 $changes = @()
 
-                if ($Model -and $Model -ne $currentResource.model) { $changes += "model: $($currentResource.model) → $Model" }
+                if ($Model -and $Model -ne $currentDefinition.model) { $changes += "model: $($currentDefinition.model) → $Model" }
                 if ($Name -and $Name -ne $currentResource.name) { $changes += "name: $($currentResource.name) → $Name" }
                 if ($EnableCodeInterpreter) { $changes += "enable code interpreter" }
                 if ($CodeInterpreterFileIds) { $changes += "update code interpreter files" }
@@ -625,9 +762,9 @@ function Set-MetroAIResource {
                 Write-Verbose "Request payload: $($requestBody | ConvertTo-Json -Depth 100 -Compress)"
 
                 $invokeParams = @{
-                    Service     = 'assistants'
-                    Operation   = 'create'
-                    Path        = $targetAssistantId
+                    Service     = 'agents'
+                    Operation   = 'update'
+                    Path        = $targetAgentId
                     Method      = 'Post'
                     ContentType = 'application/json'
                     Body        = $requestBody
@@ -636,7 +773,7 @@ function Set-MetroAIResource {
                 $result = Invoke-MetroAIApiCall @invokeParams
 
                 if ($result -and $result.id) {
-                    Write-Information "Successfully updated assistant '$($result.id)'" -InformationAction Continue
+                    Write-Information "Successfully updated agent '$($result.id)'" -InformationAction Continue
 
                     # Provide feedback about tools configuration
                     if ($result.tools -and $result.tools.Count -gt 0) {
@@ -656,7 +793,7 @@ function Set-MetroAIResource {
             }
         }
         catch {
-            $errorMessage = "Failed to update Metro AI resource '$AssistantId': $($_.Exception.Message)"
+            $errorMessage = "Failed to update Metro AI resource '$AgentId': $($_.Exception.Message)"
             Write-Error $errorMessage -ErrorAction Stop
         }
     }

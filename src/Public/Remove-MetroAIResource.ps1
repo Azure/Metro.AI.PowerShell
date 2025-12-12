@@ -3,13 +3,13 @@ function Remove-MetroAIResource {
         .SYNOPSIS
             Removes one or more Metro AI resources (Agent or Assistant).
         .DESCRIPTION
-            This function deletes Metro AI resources from the specified endpoint. When an AssistantId is provided, it deletes that specific resource. Otherwise, it retrieves all resources for the specified ApiType and attempts to delete each one. Use caution, as this action is irreversible.
+            This function deletes Metro AI resources from the specified endpoint. When an AgentId is provided, it deletes that specific resource. Otherwise, it retrieves all resources for the specified ApiType and attempts to delete each one. Use caution, as this action is irreversible.
         .PARAMETER All
             (Optional) Switch parameter to delete all resources. When used, the function will delete every resource matching the specified ApiType.
-        .PARAMETER AssistantId
-            (Optional) The unique identifier of a specific assistant resource to delete. If provided, only that resource is deleted.
+        .PARAMETER AgentId
+            (Optional) The unique identifier of a specific agent/assistant resource to delete. If provided, only that resource is deleted.
         .EXAMPLE
-            Remove-MetroAIResource -Endpoint "https://example.azure.com" -ApiType Agent -AssistantId "resource-123"
+            Remove-MetroAIResource -Endpoint "https://example.azure.com" -ApiType Agent -AgentId "resource-123"
         .EXAMPLE
             Remove-MetroAIResource -Endpoint "https://example.azure.com" -ApiType Assistant -All
         .NOTES
@@ -17,20 +17,20 @@ function Remove-MetroAIResource {
     #>
     [Alias("Remove-MetroAIAgent")]
     [Alias("Remove-MetroAIAssistant")]
-    [CmdletBinding(DefaultParameterSetName = 'All')]
+    [CmdletBinding(DefaultParameterSetName = 'All', SupportsShouldProcess = $true)]
     param (
         [Parameter(
             ParameterSetName = 'All',
             Mandatory = $false)]
         [switch]$All,
 
-        [Alias('id')]
+        [Alias('id', 'AssistantId', 'ResourceId')]
         [Parameter(
             ParameterSetName = 'ById',
             Mandatory = $true,
             ValueFromPipelineByPropertyName = $true,
             ValueFromPipeline = $true)]
-        [string]$AssistantId
+        [string]$AgentId
     )
     begin {
         $idsToDelete = @()
@@ -38,7 +38,7 @@ function Remove-MetroAIResource {
 
     process {
         if ($PSCmdlet.ParameterSetName -eq 'ById') {
-            $idsToDelete += $AssistantId
+            $idsToDelete += $AgentId
         }
     }
     end {
@@ -52,7 +52,7 @@ function Remove-MetroAIResource {
         }
         foreach ($id in $idsToDelete) {
             try {
-                Invoke-MetroAIApiCall -Service 'assistants' -Operation 'create' -Path $id -Method Delete
+                Invoke-MetroAIApiCall -Service 'agents' -Operation 'delete' -Path $id -Method Delete
 
             }
             catch {

@@ -28,6 +28,9 @@
         }
     )
 
+    # List of all files packaged with this module that have a .ps1xml extension.
+    FormatsToProcess = @('Metro.AI.Format.ps1xml')
+
     # Functions to export from this module.
     FunctionsToExport = @(
         'Invoke-MetroAIUploadFile',
@@ -39,18 +42,16 @@
         'Invoke-MetroAIApiCall',
         'Remove-MetroAIResource',
         'Set-MetroAIResource',
-        'Set-MetroAIResource',
         'New-MetroAIFunction',
-        'New-MetroAIThread',
-        'Get-MetroAIThread',
-        'Invoke-MetroAIMessage',
-        'Start-MetroAIThreadRun',
-        'Get-MetroAIThreadRunStatus',
-        'Get-MetroAIMessage',
-        'Start-MetroAIThreadWithMessages',
         'Add-MetroAIAgentOpenAPIDefinition',
         'Set-MetroAIContext',
-        'Get-MetroAIContext'
+        'Get-MetroAIContext',
+        'New-MetroAIConversation',
+        'Invoke-MetroAIConversation',
+        'Get-MetroAIConversation',
+        'Remove-MetroAIConversation',
+        'Get-MetroAIResponse',
+        'Remove-MetroAIResponse'
     )
 
     AliasesToExport   = @(

@@ -7,13 +7,12 @@ class MetroAIContext {
     [string]$ApiVersion
 
     MetroAIContext([string]$endpoint, [string]$apiType, [string]$apiVersion = "") {
-        # keep your original logic for simple endpoint+apiType
+        # Foundry preview Agents API lives under *.ai.azure.com project endpoints
         $this.Endpoint = $endpoint.TrimEnd('/')
         $this.ApiType = $apiType
         $this.ApiVersion = $apiVersion
 
-        # auto-detect current vs previous endpoint based on hostname
-        # new AI endpoints live under *.ai.azure.com
+        # Only the new API is supported now
         $this.CurrentApi = $this.Endpoint -match '\.ai\.azure\.com'
     }
 
@@ -32,19 +31,14 @@ class MetroAIContext {
         [string]$Path = "",
         [switch]$UseOpenPrefix
     ) {
-        if ($this.CurrentApi) {
-            # endpoint includes /api/projects/{…}
-            $base = "$($this.Endpoint)/$Service"
-            if ($Path) { $base += "/$Path" }
-            $ver = if ($this.ApiVersion) { $this.ApiVersion } else { '2025-05-15-preview' }
-            return "$base`?api-version=$ver"
+        if (-not $this.CurrentApi) {
+            throw "Legacy Assistant/V1 endpoints are no longer supported. Please use a Foundry project endpoint under *.ai.azure.com."
         }
 
-        # Previous behavior
-        $prefix = ($this.ApiType -eq 'Assistant' -and $UseOpenPrefix) ? "openai/" : ""
-        $baseUri = "$($this.Endpoint)/$prefix$Service"
-        if ($Path) { $baseUri += "/$Path" }
-        $ver = if ($this.ApiVersion) { $this.ApiVersion } else { Get-MetroApiVersion -Operation $Operation -ApiType $this.ApiType }
-        return "$baseUri`?api-version=$ver"
+        # Endpoint already includes /api/projects/{projectId}
+        $base = "$($this.Endpoint)/$Service"
+        if ($Path) { $base += "/$Path" }
+        $ver = if ($this.ApiVersion) { $this.ApiVersion } else { '2025-11-15-preview' }
+        return "$base`?api-version=$ver"
     }
 }

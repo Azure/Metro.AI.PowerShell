@@ -11,14 +11,6 @@ function Get-MetroApiVersion {
         [Parameter(Mandatory = $true)] [string]$Operation,
         [Parameter(Mandatory = $true)] [ValidateSet('Agent', 'Assistant')] [string]$ApiType
     )
-    switch ($Operation) {
-        'upload' { return '2024-05-01-preview' }
-        'create' { return '2024-07-01-preview' }
-        'get' { return '2024-02-15-preview' }
-        'thread' { return '2024-03-01-preview' }
-        'threadStatus' { return '2024-05-01-preview' }
-        'messages' { return '2024-05-01-preview' }
-        'openapi' { return '2024-12-01-preview' }
-        default { return '2024-05-01-preview' }
-    }
+    # Legacy version selection removed; only the new preview API version is supported.
+    return '2025-11-15-preview'
 }
