@@ -40,6 +40,7 @@ function Invoke-MetroAIApiCall {
         [Parameter(Mandatory = $false)] [object]$Body,
         [Parameter(Mandatory = $false)] [string]$ContentType,
         [Parameter(Mandatory = $false)] [hashtable]$AdditionalHeaders,
+        [Parameter(Mandatory = $false)] [hashtable]$Query,
         [Parameter(Mandatory = $false)] [int]$TimeoutSeconds = 100,
         [Parameter(Mandatory = $false)] [switch]$UseOpenPrefix,
         [Parameter(Mandatory = $false)] [object]$Form,
@@ -63,6 +64,18 @@ function Invoke-MetroAIApiCall {
             $uri = $FullUri
         } else {
             $uri = $script:MetroContext.ResolveUri($Service, $Operation, $Path, $UseOpenPrefix)
+        }
+
+        if ($Query) {
+            $qParts = @()
+            foreach ($k in $Query.Keys) {
+                $v = $Query[$k]
+                $qParts += "$k=$v"
+            }
+            if ($qParts.Count -gt 0) {
+                $joiner = if ($uri -match '\?') { '&' } else { '?' }
+                $uri += $joiner + ($qParts -join '&')
+            }
         }
 
         Write-Verbose "Calling API at URI: $uri with method $Method"
