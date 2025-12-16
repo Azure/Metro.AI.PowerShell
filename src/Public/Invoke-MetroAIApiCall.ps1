@@ -70,7 +70,7 @@ function Invoke-MetroAIApiCall {
             $qParts = @()
             foreach ($k in $Query.Keys) {
                 $v = $Query[$k]
-                $qParts += "$k=$v"
+                $qParts += "$([uri]::EscapeDataString($k))=$([uri]::EscapeDataString($v))"
             }
             if ($qParts.Count -gt 0) {
                 $joiner = if ($uri -match '\?') { '&' } else { '?' }
